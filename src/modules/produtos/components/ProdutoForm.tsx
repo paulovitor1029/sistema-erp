@@ -1,191 +1,192 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useProdutos, Produto } from '../hooks/useProdutos';
+import { useAuth } from '../../auth/context/AuthContext';
 
 const ProdutoForm = () => {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
+  const { hasPermission } = useAuth();
   const isEditMode = !!id;
   
-  const { produtos, adicionarProduto, atualizarProduto, getProdutoPorId, isLoading, error } = useProdutos();
-  
-  const [formData, setFormData] = useState<Omit<Produto, 'id'>>({
+  // Estados para o formulário
+  const [formData, setFormData] = useState({
     codigo: '',
+    codigoBarras: '',
     nome: '',
+    descricao: '',
     categoria: '',
+    unidadeMedida: 'un',
     precoCusto: 0,
     precoVenda: 0,
-    unidadeMedida: 'un',
+    margemLucro: 0,
     estoqueMinimo: 0,
     estoqueAtual: 0,
+    validade: '',
+    fornecedor: '',
+    observacoes: '',
     ativo: true,
-    observacoes: ''
+    imagem: ''
   });
   
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [categorias, setCategorias] = useState<string[]>([]);
-  const [novaCategoria, setNovaCategoria] = useState('');
-  const [showCategoriaInput, setShowCategoriaInput] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [imagemPreview, setImagemPreview] = useState<string | null>(null);
   
-  // Carregar produto para edição
-  useEffect(() => {
-    if (isEditMode && id) {
-      const produtoId = parseInt(id);
-      const produto = getProdutoPorId(produtoId);
+  // Categorias disponíveis (simulado)
+  const categorias = [
+    'Alimentos',
+    'Bebidas',
+    'Limpeza',
+    'Eletrônicos',
+    'Vestuário',
+    'Papelaria'
+  ];
+  
+  // Unidades de medida disponíveis
+  const unidadesMedida = [
+    { valor: 'un', label: 'Unidade' },
+    { valor: 'kg', label: 'Quilograma' },
+    { valor: 'g', label: 'Grama' },
+    { valor: 'l', label: 'Litro' },
+    { valor: 'ml', label: 'Mililitro' },
+    { valor: 'cx', label: 'Caixa' },
+    { valor: 'pct', label: 'Pacote' }
+  ];
+  
+  // Carregar dados do produto se estiver em modo de edição
+  useState(() => {
+    if (isEditMode) {
+      setIsLoading(true);
       
-      if (produto) {
-        const { id: _, ...produtoData } = produto;
-        setFormData(produtoData);
+      // Simulando carregamento de dados
+      setTimeout(() => {
+        // Dados mockados para exemplo
+        const produtoMock = {
+          codigo: 'PROD001',
+          codigoBarras: '7891234567890',
+          nome: 'Produto de Exemplo',
+          descricao: 'Descrição detalhada do produto de exemplo',
+          categoria: 'Alimentos',
+          unidadeMedida: 'un',
+          precoCusto: 10.50,
+          precoVenda: 19.90,
+          margemLucro: 89.52,
+          estoqueMinimo: 5,
+          estoqueAtual: 15,
+          validade: '2025-12-31',
+          fornecedor: 'Fornecedor Exemplo',
+          observacoes: 'Observações sobre o produto',
+          ativo: true,
+          imagem: 'https://via.placeholder.com/150'
+        };
         
-        if (produto.imagem) {
-          setPreviewImage(produto.imagem);
-        }
-      }
+        setFormData(produtoMock);
+        setImagemPreview(produtoMock.imagem);
+        setIsLoading(false);
+      }, 500);
     }
-  }, [isEditMode, id, getProdutoPorId]);
+  }, [isEditMode, id]);
   
-  // Extrair categorias únicas dos produtos
-  useEffect(() => {
-    if (produtos.length > 0) {
-      const categoriasUnicas = [...new Set(produtos.map(p => p.categoria))];
-      setCategorias(categoriasUnicas);
-    }
-  }, [produtos]);
+  // Calcular margem de lucro quando preço de custo ou venda mudar
+  const calcularMargemLucro = (custo: number, venda: number) => {
+    if (custo <= 0) return 0;
+    return ((venda - custo) / custo) * 100;
+  };
   
+  // Atualizar preço de venda quando margem mudar
+  const calcularPrecoVenda = (custo: number, margem: number) => {
+    return custo * (1 + margem / 100);
+  };
+  
+  // Manipuladores de eventos
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     
-    if (type === 'number' || name === 'precoCusto' || name === 'precoVenda' || name === 'estoqueMinimo' || name === 'estoqueAtual') {
-      setFormData({
-        ...formData,
-        [name]: value === '' ? 0 : parseFloat(value)
-      });
-    } else if (type === 'checkbox') {
-      setFormData({
-        ...formData,
-        [name]: (e.target as HTMLInputElement).checked
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value
-      });
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ ...prev, [name]: checked }));
+      return;
     }
     
-    // Limpar erro do campo quando ele for alterado
-    if (formErrors[name]) {
-      setFormErrors({
-        ...formErrors,
-        [name]: ''
-      });
+    if (name === 'precoCusto') {
+      const precoCusto = parseFloat(value) || 0;
+      const margemLucro = calcularMargemLucro(precoCusto, formData.precoVenda);
+      setFormData(prev => ({ ...prev, precoCusto, margemLucro }));
+      return;
     }
+    
+    if (name === 'precoVenda') {
+      const precoVenda = parseFloat(value) || 0;
+      const margemLucro = calcularMargemLucro(formData.precoCusto, precoVenda);
+      setFormData(prev => ({ ...prev, precoVenda, margemLucro }));
+      return;
+    }
+    
+    if (name === 'margemLucro') {
+      const margemLucro = parseFloat(value) || 0;
+      const precoVenda = calcularPrecoVenda(formData.precoCusto, margemLucro);
+      setFormData(prev => ({ ...prev, margemLucro, precoVenda }));
+      return;
+    }
+    
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (!file) return;
     
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setPreviewImage(result);
-        setFormData({
-          ...formData,
-          imagem: result
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  const handleRemoveImage = () => {
-    setPreviewImage(null);
-    setFormData({
-      ...formData,
-      imagem: undefined
-    });
-  };
-  
-  const handleAddCategoria = () => {
-    if (novaCategoria.trim() && !categorias.includes(novaCategoria)) {
-      setCategorias([...categorias, novaCategoria]);
-      setFormData({
-        ...formData,
-        categoria: novaCategoria
-      });
-      setNovaCategoria('');
-      setShowCategoriaInput(false);
-    }
-  };
-  
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
+    // Criar URL para preview da imagem
+    const imageUrl = URL.createObjectURL(file);
+    setImagemPreview(imageUrl);
     
-    if (!formData.codigo) {
-      errors.codigo = 'O código do produto é obrigatório';
-    }
-    
-    if (!formData.nome) {
-      errors.nome = 'O nome do produto é obrigatório';
-    }
-    
-    if (!formData.categoria) {
-      errors.categoria = 'A categoria é obrigatória';
-    }
-    
-    if (formData.precoCusto < 0) {
-      errors.precoCusto = 'O preço de custo não pode ser negativo';
-    }
-    
-    if (formData.precoVenda <= 0) {
-      errors.precoVenda = 'O preço de venda deve ser maior que zero';
-    }
-    
-    if (formData.estoqueMinimo < 0) {
-      errors.estoqueMinimo = 'O estoque mínimo não pode ser negativo';
-    }
-    
-    if (formData.estoqueAtual < 0) {
-      errors.estoqueAtual = 'O estoque atual não pode ser negativo';
-    }
-    
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    // Em um cenário real, aqui você faria upload da imagem para um servidor
+    // e salvaria a URL retornada no formData
+    setFormData(prev => ({ ...prev, imagem: imageUrl }));
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!formData.codigo || !formData.nome || !formData.categoria) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
     
-    setIsSaving(true);
+    setIsLoading(true);
+    setError(null);
     
     try {
-      if (isEditMode && id) {
-        await atualizarProduto(parseInt(id), formData);
-        alert('Produto atualizado com sucesso!');
-      } else {
-        await adicionarProduto(formData);
-        alert('Produto adicionado com sucesso!');
-      }
+      // Simulando uma chamada de API
+      await new Promise(resolve => setTimeout(resolve, 800));
       
+      // Em um cenário real, aqui você enviaria os dados para o backend
+      
+      alert(`Produto ${isEditMode ? 'atualizado' : 'cadastrado'} com sucesso!`);
       navigate('/produtos');
-    } catch (error) {
-      console.error('Erro ao salvar produto:', error);
-      alert('Ocorreu um erro ao salvar o produto. Por favor, tente novamente.');
+    } catch (err) {
+      setError(`Erro ao ${isEditMode ? 'atualizar' : 'cadastrar'} produto.`);
+      console.error(err);
     } finally {
-      setIsSaving(false);
+      setIsLoading(false);
     }
   };
   
+  if (isLoading && isEditMode) {
+    return (
+      <div className="container px-4 py-8 mx-auto">
+        <div className="flex justify-center items-center h-64">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+          <p className="ml-2">Carregando dados do produto...</p>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="container px-4 py-8 mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <h1 className="text-3xl font-bold mb-4 md:mb-0">
           {isEditMode ? 'Editar Produto' : 'Novo Produto'}
         </h1>
         
@@ -193,345 +194,329 @@ const ProdutoForm = () => {
           onClick={() => navigate('/produtos')}
           className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
         >
-          Voltar
+          Voltar para Produtos
         </button>
       </div>
       
-      {isLoading ? (
-        <div className="p-8 text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-          <p>Carregando...</p>
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
         </div>
-      ) : error ? (
-        <div className="p-8 text-center text-red-600">
-          <p>Erro ao carregar dados: {error}</p>
-          <button
-            onClick={() => navigate('/produtos')}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Voltar
-          </button>
+      )}
+      
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">Informações Básicas</h2>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Coluna da esquerda */}
-            <div className="space-y-6">
-              <div>
-                <label htmlFor="codigo" className="block text-sm font-medium text-gray-700 mb-1">
-                  Código de Barras *
-                </label>
-                <input
-                  type="text"
-                  id="codigo"
-                  name="codigo"
-                  value={formData.codigo}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border ${formErrors.codigo ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  placeholder="Ex: 7891234567890"
-                />
-                {formErrors.codigo && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.codigo}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Produto *
-                </label>
-                <input
-                  type="text"
-                  id="nome"
-                  name="nome"
-                  value={formData.nome}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border ${formErrors.nome ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  placeholder="Ex: Notebook Dell Inspiron"
-                />
-                {formErrors.nome && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.nome}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoria *
-                </label>
-                {showCategoriaInput ? (
-                  <div className="flex">
-                    <input
-                      type="text"
-                      value={novaCategoria}
-                      onChange={(e) => setNovaCategoria(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Nova categoria"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddCategoria}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex">
-                    <select
-                      id="categoria"
-                      name="categoria"
-                      value={formData.categoria}
-                      onChange={handleChange}
-                      className={`w-full px-3 py-2 border ${formErrors.categoria ? 'border-red-500' : 'border-gray-300'} rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                    >
-                      <option value="">Selecione uma categoria</option>
-                      {categorias.map((cat, index) => (
-                        <option key={index} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowCategoriaInput(true)}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-r-md hover:bg-gray-300"
-                    >
-                      Nova
-                    </button>
-                  </div>
-                )}
-                {formErrors.categoria && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.categoria}</p>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="precoCusto" className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço de Custo (R$) *
-                  </label>
-                  <input
-                    type="number"
-                    id="precoCusto"
-                    name="precoCusto"
-                    value={formData.precoCusto}
-                    onChange={handleChange}
-                    step="0.01"
-                    min="0"
-                    className={`w-full px-3 py-2 border ${formErrors.precoCusto ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  />
-                  {formErrors.precoCusto && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.precoCusto}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label htmlFor="precoVenda" className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço de Venda (R$) *
-                  </label>
-                  <input
-                    type="number"
-                    id="precoVenda"
-                    name="precoVenda"
-                    value={formData.precoVenda}
-                    onChange={handleChange}
-                    step="0.01"
-                    min="0"
-                    className={`w-full px-3 py-2 border ${formErrors.precoVenda ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  />
-                  {formErrors.precoVenda && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.precoVenda}</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="unidadeMedida" className="block text-sm font-medium text-gray-700 mb-1">
-                    Unidade de Medida *
-                  </label>
-                  <select
-                    id="unidadeMedida"
-                    name="unidadeMedida"
-                    value={formData.unidadeMedida}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="un">Unidade (un)</option>
-                    <option value="kg">Quilograma (kg)</option>
-                    <option value="g">Grama (g)</option>
-                    <option value="l">Litro (l)</option>
-                    <option value="ml">Mililitro (ml)</option>
-                    <option value="m">Metro (m)</option>
-                    <option value="cm">Centímetro (cm)</option>
-                    <option value="cx">Caixa (cx)</option>
-                    <option value="pct">Pacote (pct)</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label htmlFor="validade" className="block text-sm font-medium text-gray-700 mb-1">
-                    Data de Validade
-                  </label>
-                  <input
-                    type="date"
-                    id="validade"
-                    name="validade"
-                    value={formData.validade || ''}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="estoqueMinimo" className="block text-sm font-medium text-gray-700 mb-1">
-                    Estoque Mínimo *
-                  </label>
-                  <input
-                    type="number"
-                    id="estoqueMinimo"
-                    name="estoqueMinimo"
-                    value={formData.estoqueMinimo}
-                    onChange={handleChange}
-                    min="0"
-                    className={`w-full px-3 py-2 border ${formErrors.estoqueMinimo ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  />
-                  {formErrors.estoqueMinimo && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.estoqueMinimo}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label htmlFor="estoqueAtual" className="block text-sm font-medium text-gray-700 mb-1">
-                    Estoque Atual *
-                  </label>
-                  <input
-                    type="number"
-                    id="estoqueAtual"
-                    name="estoqueAtual"
-                    value={formData.estoqueAtual}
-                    onChange={handleChange}
-                    min="0"
-                    className={`w-full px-3 py-2 border ${formErrors.estoqueAtual ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  />
-                  {formErrors.estoqueAtual && (
-                    <p className="mt-1 text-sm text-red-600">{formErrors.estoqueAtual}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            {/* Coluna da direita */}
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Imagem do Produto
-                </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                  {previewImage ? (
-                    <div className="text-center">
-                      <img
-                        src={previewImage}
-                        alt="Preview"
-                        className="mx-auto h-32 w-32 object-cover rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleRemoveImage}
-                        className="mt-2 px-3 py-1 text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remover imagem
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1 text-center">
-                      <svg
-                        className="mx-auto h-12 w-12 text-gray-400"
-                        stroke="currentColor"
-                        fill="none"
-                        viewBox="0 0 48 48"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                          strokeWidth={2}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <div className="flex text-sm text-gray-600">
-                        <label
-                          htmlFor="imagem"
-                          className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
-                        >
-                          <span>Carregar imagem</span>
-                          <input
-                            id="imagem"
-                            name="imagem"
-                            type="file"
-                            accept="image/*"
-                            className="sr-only"
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                        <p className="pl-1">ou arraste e solte</p>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        PNG, JPG, GIF até 10MB
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-1">
-                  Observações
-                </label>
-                <textarea
-                  id="observacoes"
-                  name="observacoes"
-                  rows={5}
-                  value={formData.observacoes || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Informações adicionais sobre o produto..."
-                />
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="ativo"
-                  name="ativo"
-                  checked={formData.ativo}
-                  onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="ativo" className="ml-2 block text-sm text-gray-900">
-                  Produto ativo
-                </label>
-              </div>
-            </div>
+        
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div>
+            <label htmlFor="codigo" className="block text-sm font-medium text-gray-700 mb-1">
+              Código Interno *
+            </label>
+            <input
+              type="text"
+              id="codigo"
+              name="codigo"
+              value={formData.codigo}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
           </div>
           
-          <div className="mt-8 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={() => navigate('/produtos')}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-            >
-              {isSaving ? 'Salvando...' : isEditMode ? 'Atualizar Produto' : 'Cadastrar Produto'}
-            </button>
+          <div>
+            <label htmlFor="codigoBarras" className="block text-sm font-medium text-gray-700 mb-1">
+              Código de Barras
+            </label>
+            <input
+              type="text"
+              id="codigoBarras"
+              name="codigoBarras"
+              value={formData.codigoBarras}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        </form>
-      )}
+          
+          <div>
+            <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-1">
+              Nome do Produto *
+            </label>
+            <input
+              type="text"
+              id="nome"
+              name="nome"
+              value={formData.nome}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          <div className="md:col-span-2">
+            <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
+              Descrição
+            </label>
+            <textarea
+              id="descricao"
+              name="descricao"
+              value={formData.descricao}
+              onChange={handleChange}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">
+              Categoria *
+            </label>
+            <select
+              id="categoria"
+              name="categoria"
+              value={formData.categoria}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Selecione uma categoria</option>
+              {categorias.map((categoria, index) => (
+                <option key={index} value={categoria}>{categoria}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label htmlFor="unidadeMedida" className="block text-sm font-medium text-gray-700 mb-1">
+              Unidade de Medida *
+            </label>
+            <select
+              id="unidadeMedida"
+              name="unidadeMedida"
+              value={formData.unidadeMedida}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              {unidadesMedida.map((unidade, index) => (
+                <option key={index} value={unidade.valor}>{unidade.label} ({unidade.valor})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div className="p-6 border-t border-b border-gray-200">
+          <h2 className="text-xl font-semibold mb-4">Preços e Estoque</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div>
+              <label htmlFor="precoCusto" className="block text-sm font-medium text-gray-700 mb-1">
+                Preço de Custo (R$) *
+              </label>
+              <input
+                type="number"
+                id="precoCusto"
+                name="precoCusto"
+                value={formData.precoCusto}
+                onChange={handleChange}
+                step="0.01"
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="precoVenda" className="block text-sm font-medium text-gray-700 mb-1">
+                Preço de Venda (R$) *
+              </label>
+              <input
+                type="number"
+                id="precoVenda"
+                name="precoVenda"
+                value={formData.precoVenda}
+                onChange={handleChange}
+                step="0.01"
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="margemLucro" className="block text-sm font-medium text-gray-700 mb-1">
+                Margem de Lucro (%)
+              </label>
+              <input
+                type="number"
+                id="margemLucro"
+                name="margemLucro"
+                value={formData.margemLucro.toFixed(2)}
+                onChange={handleChange}
+                step="0.01"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                readOnly
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="estoqueMinimo" className="block text-sm font-medium text-gray-700 mb-1">
+                Estoque Mínimo *
+              </label>
+              <input
+                type="number"
+                id="estoqueMinimo"
+                name="estoqueMinimo"
+                value={formData.estoqueMinimo}
+                onChange={handleChange}
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="estoqueAtual" className="block text-sm font-medium text-gray-700 mb-1">
+                Estoque Atual *
+              </label>
+              <input
+                type="number"
+                id="estoqueAtual"
+                name="estoqueAtual"
+                value={formData.estoqueAtual}
+                onChange={handleChange}
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="validade" className="block text-sm font-medium text-gray-700 mb-1">
+                Data de Validade
+              </label>
+              <input
+                type="date"
+                id="validade"
+                name="validade"
+                value={formData.validade}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold mb-4">Informações Adicionais</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="fornecedor" className="block text-sm font-medium text-gray-700 mb-1">
+                Fornecedor
+              </label>
+              <input
+                type="text"
+                id="fornecedor"
+                name="fornecedor"
+                value={formData.fornecedor}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-1">
+                Observações
+              </label>
+              <textarea
+                id="observacoes"
+                name="observacoes"
+                value={formData.observacoes}
+                onChange={handleChange}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="ativo"
+                name="ativo"
+                checked={formData.ativo}
+                onChange={handleChange}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="ativo" className="ml-2 block text-sm text-gray-900">
+                Produto Ativo
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold mb-4">Imagem do Produto</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="imagem" className="block text-sm font-medium text-gray-700 mb-1">
+                Selecionar Imagem
+              </label>
+              <input
+                type="file"
+                id="imagem"
+                name="imagem"
+                onChange={handleImagemChange}
+                accept="image/*"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Formatos aceitos: JPG, PNG, GIF. Tamanho máximo: 2MB.
+              </p>
+            </div>
+            
+            <div>
+              {imagemPreview ? (
+                <div className="mt-2">
+                  <p className="block text-sm font-medium text-gray-700 mb-1">Preview:</p>
+                  <img 
+                    src={imagemPreview} 
+                    alt="Preview" 
+                    className="h-32 w-32 object-cover rounded-md border border-gray-300"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <p className="block text-sm font-medium text-gray-700 mb-1">Preview:</p>
+                  <div className="h-32 w-32 bg-gray-100 flex items-center justify-center rounded-md border border-gray-300">
+                    <span className="text-gray-400">Sem imagem</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={() => navigate('/produtos')}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+          >
+            Cancelar
+          </button>
+          
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={isLoading || !hasPermission('operador')}
+          >
+            {isLoading ? 'Salvando...' : isEditMode ? 'Atualizar Produto' : 'Cadastrar Produto'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

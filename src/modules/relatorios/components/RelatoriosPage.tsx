@@ -63,14 +63,6 @@ const RelatoriosPage = () => {
     }
   };
   
-  const handleExportarPDF = () => {
-    alert('Funcionalidade de exportação para PDF será implementada no backend');
-  };
-  
-  const handleExportarExcel = () => {
-    alert('Funcionalidade de exportação para Excel será implementada no backend');
-  };
-  
   const formatarMoeda = (valor: number) => {
     return valor.toLocaleString('pt-BR', {
       style: 'currency',
@@ -372,13 +364,13 @@ const RelatoriosPage = () => {
                     Data
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
+                    Descrição
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Categoria
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Descrição
+                    Tipo
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Valor
@@ -386,224 +378,11 @@ const RelatoriosPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {movimentacoes.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                      Não há movimentações no período selecionado
-                    </td>
-                  </tr>
-                ) : (
-                  movimentacoes.map((mov) => (
-                    <tr key={mov.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarData(mov.data)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          mov.tipo === 'entrada' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {mov.tipo === 'entrada' ? 'Entrada' : 'Saída'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {mov.categoria}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {mov.descricao}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <span className={mov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>
-                          {formatarMoeda(mov.valor)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  
-  // Componente de relatório de clientes
-  const RelatorioClientes = () => {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Total de Clientes</div>
-            <div className="text-2xl font-bold text-blue-600">{clientes.length}</div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Clientes Ativos</div>
-            <div className="text-2xl font-bold text-green-600">
-              {clientes.filter(c => c.ativo).length}
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Valor Total em Compras</div>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatarMoeda(clientes.reduce((sum, c) => sum + c.valorTotalCompras, 0))}
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold mb-4">Clientes por Valor de Compra</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cliente
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    CPF/CNPJ
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Última Compra
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total em Compras
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pontos Fidelidade
-                  </th>
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                    Não há movimentações para o período selecionado
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {clientes.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                      Não há clientes cadastrados
-                    </td>
-                  </tr>
-                ) : (
-                  // Ordenar por valor total de compras (decrescente)
-                  [...clientes]
-                    .sort((a, b) => b.valorTotalCompras - a.valorTotalCompras)
-                    .map((cliente) => (
-                      <tr key={cliente.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {cliente.nome}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {cliente.cpfCnpj}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {cliente.dataUltimaCompra ? formatarData(cliente.dataUltimaCompra) : 'Nunca'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatarMoeda(cliente.valorTotalCompras)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {cliente.pontosFidelidade} pts
-                        </td>
-                      </tr>
-                    ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  
-  // Componente de relatório de funcionários
-  const RelatorioFuncionarios = () => {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Total de Funcionários</div>
-            <div className="text-2xl font-bold text-blue-600">{funcionarios.length}</div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Funcionários Ativos</div>
-            <div className="text-2xl font-bold text-green-600">
-              {funcionarios.filter(f => f.ativo).length}
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow-md">
-            <div className="text-sm text-gray-500">Total em Salários</div>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatarMoeda(funcionarios.reduce((sum, f) => sum + (f.ativo ? f.salario : 0), 0))}
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold mb-4">Funcionários por Cargo</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Funcionário
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cargo
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nível de Acesso
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data de Admissão
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Salário
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {funcionarios.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                      Não há funcionários cadastrados
-                    </td>
-                  </tr>
-                ) : (
-                  // Ordenar por cargo
-                  [...funcionarios]
-                    .sort((a, b) => a.cargo.localeCompare(b.cargo))
-                    .map((funcionario) => (
-                      <tr key={funcionario.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {funcionario.nome}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {funcionario.cargo}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {funcionario.nivelAcesso === 'admin' ? 'Administrador' : 
-                           funcionario.nivelAcesso === 'gerente' ? 'Gerente' : 'Operador'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatarData(funcionario.dataAdmissao)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatarMoeda(funcionario.salario)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            funcionario.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {funcionario.ativo ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                )}
               </tbody>
             </table>
           </div>
@@ -617,28 +396,42 @@ const RelatoriosPage = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-3xl font-bold mb-4 md:mb-0">Relatórios</h1>
         
-        {relatorioGerado && (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={handleExportarPDF}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-            >
-              Exportar PDF
-            </button>
-            
-            <button
-              onClick={handleExportarExcel}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              Exportar Excel
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            disabled={!relatorioGerado}
+            className={`px-4 py-2 rounded-md flex items-center justify-center ${
+              !relatorioGerado 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            } transition-colors`}
+            title={!relatorioGerado ? 'Gere um relatório primeiro' : 'Exportar para PDF'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            Exportar para PDF
+          </button>
+          
+          <button
+            disabled={!relatorioGerado}
+            className={`px-4 py-2 rounded-md flex items-center justify-center ${
+              !relatorioGerado 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-green-600 text-white hover:bg-green-700'
+            } transition-colors`}
+            title={!relatorioGerado ? 'Gere um relatório primeiro' : 'Exportar para Excel'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Exportar para Excel
+          </button>
+        </div>
       </div>
       
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label htmlFor="tipoRelatorio" className="block text-sm font-medium text-gray-700 mb-1">
               Tipo de Relatório
@@ -649,11 +442,9 @@ const RelatoriosPage = () => {
               onChange={(e) => setTipoRelatorio(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="vendas">Vendas</option>
-              <option value="estoque">Estoque</option>
-              <option value="financeiro">Financeiro</option>
-              <option value="clientes">Clientes</option>
-              <option value="funcionarios">Funcionários</option>
+              <option value="vendas">Relatório de Vendas</option>
+              <option value="estoque">Relatório de Estoque</option>
+              <option value="financeiro">Relatório Financeiro</option>
             </select>
           </div>
           
@@ -682,38 +473,16 @@ const RelatoriosPage = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
-          {tipoRelatorio === 'vendas' && (
-            <div>
-              <label htmlFor="agruparPor" className="block text-sm font-medium text-gray-700 mb-1">
-                Agrupar Por
-              </label>
-              <select
-                id="agruparPor"
-                value={agruparPor}
-                onChange={(e) => setAgruparPor(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="dia">Dia</option>
-                <option value="semana">Semana</option>
-                <option value="mes">Mês</option>
-                <option value="funcionario">Funcionário</option>
-                <option value="cliente">Cliente</option>
-                <option value="produto">Produto</option>
-              </select>
-            </div>
-          )}
         </div>
         
-        {/* Filtros adicionais específicos por tipo de relatório */}
         {tipoRelatorio === 'vendas' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label htmlFor="funcionario" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="funcionarioId" className="block text-sm font-medium text-gray-700 mb-1">
                 Funcionário
               </label>
               <select
-                id="funcionario"
+                id="funcionarioId"
                 value={funcionarioId || ''}
                 onChange={(e) => setFuncionarioId(e.target.value ? parseInt(e.target.value) : null)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -728,11 +497,11 @@ const RelatoriosPage = () => {
             </div>
             
             <div>
-              <label htmlFor="cliente" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="clienteId" className="block text-sm font-medium text-gray-700 mb-1">
                 Cliente
               </label>
               <select
-                id="cliente"
+                id="clienteId"
                 value={clienteId || ''}
                 onChange={(e) => setClienteId(e.target.value ? parseInt(e.target.value) : null)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -756,13 +525,12 @@ const RelatoriosPage = () => {
                 onChange={(e) => setFormaPagamento(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Todas</option>
+                <option value="">Todas as formas</option>
                 <option value="dinheiro">Dinheiro</option>
                 <option value="cartao_credito">Cartão de Crédito</option>
                 <option value="cartao_debito">Cartão de Débito</option>
                 <option value="pix">PIX</option>
                 <option value="boleto">Boleto</option>
-                <option value="transferencia">Transferência Bancária</option>
               </select>
             </div>
           </div>
@@ -771,11 +539,11 @@ const RelatoriosPage = () => {
         {tipoRelatorio === 'estoque' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label htmlFor="produto" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="produtoId" className="block text-sm font-medium text-gray-700 mb-1">
                 Produto
               </label>
               <select
-                id="produto"
+                id="produtoId"
                 value={produtoId || ''}
                 onChange={(e) => setProdutoId(e.target.value ? parseInt(e.target.value) : null)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -790,21 +558,41 @@ const RelatoriosPage = () => {
             </div>
             
             <div>
-              <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="categoriaId" className="block text-sm font-medium text-gray-700 mb-1">
                 Categoria
               </label>
               <select
-                id="categoria"
+                id="categoriaId"
                 value={categoriaId}
                 onChange={(e) => setCategoriaId(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todas as categorias</option>
-                {[...new Set(produtos.map(p => p.categoria))].map((categoria, index) => (
-                  <option key={index} value={categoria}>
+                {Array.from(new Set(produtos.map(p => p.categoria))).map((categoria, index) => (
+                  <option key={index} value={categoria as string}>
                     {categoria}
                   </option>
                 ))}
+              </select>
+            </div>
+          </div>
+        )}
+        
+        {tipoRelatorio === 'financeiro' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label htmlFor="agruparPor" className="block text-sm font-medium text-gray-700 mb-1">
+                Agrupar por
+              </label>
+              <select
+                id="agruparPor"
+                value={agruparPor}
+                onChange={(e) => setAgruparPor(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="dia">Dia</option>
+                <option value="semana">Semana</option>
+                <option value="mes">Mês</option>
               </select>
             </div>
           </div>
@@ -814,39 +602,45 @@ const RelatoriosPage = () => {
           <button
             onClick={handleGerarRelatorio}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={isLoading}
           >
-            Gerar Relatório
+            {isLoading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <span>Gerando...</span>
+              </div>
+            ) : (
+              'Gerar Relatório'
+            )}
           </button>
         </div>
       </div>
       
-      {/* Conteúdo do Relatório */}
-      {isLoading ? (
-        <div className="bg-white p-8 rounded-lg shadow-md text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-          <p>Gerando relatório...</p>
+      {/* Mensagem sobre exportação */}
+      {relatorioGerado && (
+        <div className="mb-4 text-sm text-gray-500 text-right">
+          <p>Funcionalidade de exportação será disponibilizada em breve.</p>
         </div>
-      ) : error ? (
-        <div className="bg-white p-8 rounded-lg shadow-md text-center text-red-600">
-          <p>Erro ao gerar relatório: {error}</p>
-          <button
-            onClick={handleGerarRelatorio}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Tentar Novamente
-          </button>
+      )}
+      
+      {/* Conteúdo do Relatório */}
+      {error ? (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
         </div>
       ) : relatorioGerado ? (
-        <>
+        <div>
           {tipoRelatorio === 'vendas' && <RelatorioVendas />}
           {tipoRelatorio === 'estoque' && <RelatorioEstoque />}
           {tipoRelatorio === 'financeiro' && <RelatorioFinanceiro />}
-          {tipoRelatorio === 'clientes' && <RelatorioClientes />}
-          {tipoRelatorio === 'funcionarios' && <RelatorioFuncionarios />}
-        </>
+        </div>
       ) : (
-        <div className="bg-white p-8 rounded-lg shadow-md text-center text-gray-500">
-          <p>Selecione os filtros e clique em "Gerar Relatório" para visualizar os dados.</p>
+        <div className="bg-white p-8 rounded-lg shadow-md text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h2 className="text-xl font-semibold mb-2">Nenhum relatório gerado</h2>
+          <p className="text-gray-500 mb-4">Selecione os filtros desejados e clique em "Gerar Relatório"</p>
         </div>
       )}
     </div>

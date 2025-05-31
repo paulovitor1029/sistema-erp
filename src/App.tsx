@@ -6,14 +6,24 @@ import Sidebar from './modules/layout/components/Sidebar';
 
 // Importação dos componentes de página
 import EstoquePage from './modules/estoque/components/EstoquePage';
+import EstoqueEntradaForm from './modules/estoque/components/EstoqueEntradaForm';
+import EstoqueSaidaForm from './modules/estoque/components/EstoqueSaidaForm';
+import EstoqueAjusteForm from './modules/estoque/components/EstoqueAjusteForm';
+
 import ProdutosPage from './modules/produtos/components/ProdutosPage';
 import ProdutoForm from './modules/produtos/components/ProdutoForm';
 import ProdutoDetalhes from './modules/produtos/components/ProdutoDetalhes';
+import CategoriaForm from './modules/produtos/components/CategoriaForm';
+
 import PromocoesPage from './modules/promocoes/components/PromocoesPage';
 import PDVPage from './modules/pdv/components/PDVPage';
+
 import FuncionariosPage from './modules/usuarios/components/FuncionariosPage';
 import PontoPage from './modules/ponto/components/PontoPage';
+
 import ClientesPage from './modules/clientes/components/ClientesPage';
+import ClienteForm from './modules/clientes/components/ClienteForm';
+
 import CaixaPage from './modules/caixa/components/CaixaPage';
 import RelatoriosPage from './modules/relatorios/components/RelatoriosPage';
 import ConfiguracoesPage from './modules/configuracoes/components/ConfiguracoesPage';
@@ -83,30 +93,44 @@ function App() {
           <Route path="/login" element={<LoginPage onLogin={() => setIsAuthenticated(true)} />} />
           
           <Route path="/" element={<Layout><EstoquePage /></Layout>} />
-          <Route path="/estoque" element={<Layout><EstoquePage /></Layout>} />
           
+          {/* Rotas de Estoque */}
+          <Route path="/estoque" element={<Layout><EstoquePage /></Layout>} />
+          <Route path="/estoque/entrada" element={<Layout><EstoqueEntradaForm /></Layout>} />
+          <Route path="/estoque/saida" element={<Layout><EstoqueSaidaForm /></Layout>} />
+          <Route path="/estoque/ajuste" element={<Layout><EstoqueAjusteForm /></Layout>} />
+          
+          {/* Rotas de Produtos */}
           <Route path="/produtos" element={<Layout><ProdutosPage /></Layout>} />
           <Route path="/produtos/novo" element={<Layout><ProdutoForm /></Layout>} />
           <Route path="/produtos/:id" element={<Layout><ProdutoDetalhes /></Layout>} />
           <Route path="/produtos/editar/:id" element={<Layout><ProdutoForm /></Layout>} />
+          <Route path="/produtos/categorias" element={<Layout><CategoriaForm /></Layout>} />
           
+          {/* Rotas de Promoções */}
           <Route path="/promocoes" element={<Layout><PromocoesPage /></Layout>} />
           
+          {/* Rotas de PDV */}
           <Route path="/pdv" element={<Layout><PDVPage /></Layout>} />
           
+          {/* Rotas de Funcionários e Ponto */}
           <Route path="/funcionarios" element={<Layout><FuncionariosPage /></Layout>} />
           <Route path="/ponto" element={<Layout><PontoPage /></Layout>} />
           
+          {/* Rotas de Clientes */}
           <Route path="/clientes" element={<Layout><ClientesPage /></Layout>} />
-          <Route path="/clientes/novo" element={<Layout><ClientesPage /></Layout>} />
+          <Route path="/clientes/novo" element={<Layout><ClienteForm /></Layout>} />
           <Route path="/clientes/:id" element={<Layout><ClientesPage /></Layout>} />
-          <Route path="/clientes/editar/:id" element={<Layout><ClientesPage /></Layout>} />
+          <Route path="/clientes/editar/:id" element={<Layout><ClienteForm /></Layout>} />
           
+          {/* Rotas de Caixa */}
           <Route path="/caixa" element={<Layout><CaixaPage /></Layout>} />
           
+          {/* Rotas de Relatórios */}
           <Route path="/relatorios" element={<Layout><RelatoriosPage /></Layout>} />
           <Route path="/relatorios/:tipo" element={<Layout><RelatoriosPage /></Layout>} />
           
+          {/* Rotas de Configurações */}
           <Route path="/configuracoes" element={<Layout><ConfiguracoesPage /></Layout>} />
           
           <Route path="*" element={<Navigate to="/" />} />

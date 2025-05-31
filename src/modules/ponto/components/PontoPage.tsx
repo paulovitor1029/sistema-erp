@@ -79,7 +79,7 @@ const PontoPage = () => {
     const resultado = await registrarEntrada(funcionarioId, observacao);
     
     if (resultado) {
-      alert('Entrada registrada com sucesso!');
+      alert('Entrada do funcionário registrada com sucesso!');
       setObservacao('');
       recarregarRegistros();
     } else {
@@ -96,7 +96,7 @@ const PontoPage = () => {
     const resultado = await registrarSaida(funcionarioId, observacao);
     
     if (resultado) {
-      alert('Saída registrada com sucesso!');
+      alert('Saída do funcionário registrada com sucesso!');
       setObservacao('');
       recarregarRegistros();
     } else {
@@ -158,14 +158,14 @@ const PontoPage = () => {
             onClick={() => navigate('/funcionarios')}
             className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
           >
-            Voltar para Funcionários
+            Ir para Funcionários
           </button>
         </div>
       </div>
       
       {/* Registro de Ponto */}
       <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 className="text-xl font-semibold mb-4">Registrar Ponto</h2>
+        <h2 className="text-xl font-semibold mb-4">Registrar Ponto de Funcionário</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -211,18 +211,36 @@ const PontoPage = () => {
               onClick={handleRegistrarEntrada}
               className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               disabled={!funcionarioId}
+              title="Registrar horário de entrada do funcionário"
             >
-              Registrar Entrada
+              <div className="flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                <span>Registrar Entrada</span>
+              </div>
             </button>
             
             <button
               onClick={handleRegistrarSaida}
               className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
               disabled={!funcionarioId}
+              title="Registrar horário de saída do funcionário"
             >
-              Registrar Saída
+              <div className="flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Registrar Saída</span>
+              </div>
             </button>
           </div>
+        </div>
+        
+        <div className="mt-4 text-sm text-gray-600">
+          <p>
+            <span className="font-medium">Nota:</span> Este sistema registra os horários de entrada e saída dos funcionários para controle de ponto.
+          </p>
         </div>
       </div>
       
