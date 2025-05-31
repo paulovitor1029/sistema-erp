@@ -1,28 +1,43 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
-interface LoginPageProps {
-  onLogin: () => void;
-}
-
-const LoginPage = ({ onLogin }: LoginPageProps) => {
-  const [username, setUsername] = useState('');
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validação simples: qualquer informação é aceita desde que os campos não estejam vazios
-    if (username.trim() === '' || password.trim() === '') {
+    if (email.trim() === '' || password.trim() === '') {
       setError('Por favor, preencha todos os campos');
       return;
     }
     
-    // Qualquer informação inserida é válida
-    onLogin(); // Notifica o App que o usuário está autenticado
-    navigate('/dashboard');
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      // Usa o contexto de autenticação para fazer login
+      const success = await login(email, password);
+      
+      if (success) {
+        // Redireciona para a página inicial após login bem-sucedido
+        navigate('/');
+      } else {
+        setError('Falha na autenticação. Tente novamente.');
+      }
+    } catch (err) {
+      setError('Ocorreu um erro durante o login. Tente novamente.');
+      console.error('Erro de login:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -41,17 +56,17 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
           )}
           
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Usuário
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              Email
             </label>
             <input
-              id="username"
-              name="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              id="email"
+              name="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="block w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Digite seu usuário"
+              placeholder="Digite seu email"
             />
           </div>
           
@@ -73,10 +88,16 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
           <div>
             <button
               type="submit"
-              className="flex justify-center w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isLoading}
+              className="flex justify-center w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              Entrar
+              {isLoading ? 'Entrando...' : 'Entrar'}
             </button>
+          </div>
+          
+          <div className="text-sm text-center text-gray-500">
+            <p>Use qualquer email e senha para testar o sistema.</p>
+            <p className="mt-1">Dica: emails contendo "admin" ou "gerente" têm permissões especiais.</p>
           </div>
         </form>
       </div>

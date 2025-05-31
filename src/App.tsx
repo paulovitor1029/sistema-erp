@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { AuthProvider } from './modules/auth/context/AuthContext';
+import { AuthProvider, useAuth } from './modules/auth/context/AuthContext';
 import LoginPage from './modules/auth/components/LoginPage';
 import DashboardPage from './modules/dashboard/components/DashboardPage';
 import ProdutosPage from './modules/produtos/components/ProdutosPage';
@@ -66,9 +66,9 @@ function App() {
     );
   };
   
-  // Componente de rota protegida que verifica autenticação
+  // Componente de rota protegida que verifica autenticação usando o contexto
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    const isAuthenticated = localStorage.getItem('user') !== null;
+    const { isAuthenticated } = useAuth();
     
     if (!isAuthenticated) {
       return <Navigate to="/login" replace />;
@@ -77,11 +77,22 @@ function App() {
     return <Layout>{children}</Layout>;
   };
   
+  // Componente para redirecionar usuários já autenticados para a página inicial
+  const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+    const { isAuthenticated } = useAuth();
+    
+    if (isAuthenticated) {
+      return <Navigate to="/" replace />;
+    }
+    
+    return <>{children}</>;
+  };
+  
   return (
     <Router>
       <AuthProvider>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           

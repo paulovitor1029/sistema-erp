@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface MovimentacaoCaixa {
   id: number;
@@ -32,50 +32,133 @@ export const useCaixa = () => {
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoCaixa[]>([]);
   const [fechamentos, setFechamentos] = useState<FechamentoCaixa[]>([]);
   const [caixaAtual, setCaixaAtual] = useState<FechamentoCaixa | null>(null);
+  const [saldoAtual, setSaldoAtual] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMovimentacoes = async () => {
+  // Memoizar a função de cálculo para evitar recriações desnecessárias
+  const calcularSaldoAtual = useCallback(() => {
+    let saldo = 0;
+    
+    // Se houver caixa aberto, começar com o valor inicial
+    if (caixaAtual) {
+      saldo = caixaAtual.valorInicial;
+      
+      // Somar entradas e subtrair saídas desde a abertura do caixa
+      const movimentacoesCaixa = movimentacoes.filter(m => 
+        new Date(m.data) >= new Date(caixaAtual.dataAbertura)
+      );
+      
+      movimentacoesCaixa.forEach(m => {
+        if (m.tipo === 'entrada') {
+          saldo += m.valor;
+        } else {
+          saldo -= m.valor;
+        }
+      });
+    } else {
+      // Se não houver caixa aberto, calcular com base no último fechamento
+      const ultimoFechamento = [...fechamentos].sort((a, b) => 
+        new Date(b.dataFechamento).getTime() - new Date(a.dataFechamento).getTime()
+      )[0];
+      
+      if (ultimoFechamento) {
+        saldo = ultimoFechamento.valorFinal;
+      }
+    }
+    
+    setSaldoAtual(saldo);
+    return saldo;
+  }, [movimentacoes, caixaAtual, fechamentos]);
+
+  // Calcular saldo atual sempre que movimentações ou caixa atual mudar
+  useEffect(() => {
+    calcularSaldoAtual();
+  }, [calcularSaldoAtual]);
+
+  const fetchMovimentacoes = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
       // Simulando uma chamada de API
       await new Promise(resolve => setTimeout(resolve, 500));
-      // Inicializa com array vazio em vez de dados mockados
-      setMovimentacoes([]);
+      
+      // Para fins de demonstração, criar algumas movimentações de exemplo
+      // Em produção, isso seria substituído por uma chamada de API real
+      const dataAtual = new Date().toISOString().split('T')[0];
+      const movimentacoesDemo = [
+        {
+          id: 1,
+          data: dataAtual,
+          tipo: 'entrada' as const,
+          categoria: 'Venda',
+          descricao: 'Venda de produto',
+          valor: 150.00,
+          formaPagamento: 'dinheiro',
+          funcionarioId: 1,
+        },
+        {
+          id: 2,
+          data: dataAtual,
+          tipo: 'saida' as const,
+          categoria: 'Despesa',
+          descricao: 'Pagamento de fornecedor',
+          valor: 50.00,
+          formaPagamento: 'transferencia',
+          funcionarioId: 1,
+        }
+      ];
+      
+      setMovimentacoes(movimentacoesDemo);
     } catch (err) {
       setError('Erro ao carregar movimentações');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const fetchFechamentos = async () => {
+  const fetchFechamentos = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
       // Simulando uma chamada de API
       await new Promise(resolve => setTimeout(resolve, 500));
-      // Inicializa com array vazio em vez de dados mockados
-      setFechamentos([]);
       
-      // Verificar se existe caixa aberto
-      const caixaAberto = [] as FechamentoCaixa[];
-      if (caixaAberto.length > 0) {
-        setCaixaAtual(caixaAberto[0]);
-      } else {
-        setCaixaAtual(null);
-      }
+      // Para fins de demonstração, criar um caixa aberto
+      // Em produção, isso seria substituído por uma chamada de API real
+      const dataAtual = new Date().toISOString().split('T')[0];
+      const caixaDemo: FechamentoCaixa = {
+        id: 1,
+        dataAbertura: dataAtual,
+        dataFechamento: '',
+        valorInicial: 100.00,
+        valorFinal: 0,
+        valorEntradas: 0,
+        valorSaidas: 0,
+        valorDiferenca: 0,
+        funcionarioAberturaId: 1,
+        funcionarioFechamentoId: 0,
+        status: 'aberto'
+      };
+      
+      setFechamentos([caixaDemo]);
+      setCaixaAtual(caixaDemo);
     } catch (err) {
       setError('Erro ao carregar fechamentos');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const abrirCaixa = async (funcionarioId: number, valorInicial: number, observacao?: string) => {
+  // Carregar dados iniciais apenas uma vez
+  useEffect(() => {
+    fetchMovimentacoes();
+    fetchFechamentos();
+  }, [fetchMovimentacoes, fetchFechamentos]);
+
+  const abrirCaixa = async (dados: { valorInicial: number, data: string, hora: string, observacao?: string }) => {
     setIsLoading(true);
     setError(null);
     
@@ -91,20 +174,20 @@ export const useCaixa = () => {
       
       const novoCaixa: FechamentoCaixa = {
         id: Math.max(...fechamentos.map(f => f.id), 0) + 1,
-        dataAbertura: new Date().toISOString(),
+        dataAbertura: dados.data,
         dataFechamento: '',
-        valorInicial,
+        valorInicial: dados.valorInicial,
         valorFinal: 0,
         valorEntradas: 0,
         valorSaidas: 0,
         valorDiferenca: 0,
-        funcionarioAberturaId: funcionarioId,
+        funcionarioAberturaId: 1, // Usuário logado
         funcionarioFechamentoId: 0,
-        observacao,
+        observacao: dados.observacao,
         status: 'aberto'
       };
       
-      setFechamentos([...fechamentos, novoCaixa]);
+      setFechamentos(prev => [...prev, novoCaixa]);
       setCaixaAtual(novoCaixa);
       
       return novoCaixa;
@@ -116,7 +199,7 @@ export const useCaixa = () => {
     }
   };
 
-  const fecharCaixa = async (funcionarioId: number, valorFinal: number, observacao?: string) => {
+  const fecharCaixa = async (dados: { valorFinal: number, data: string, hora: string, observacao?: string }) => {
     setIsLoading(true);
     setError(null);
     
@@ -144,22 +227,22 @@ export const useCaixa = () => {
         .reduce((sum, m) => sum + m.valor, 0);
       
       const valorEsperado = caixaAtual.valorInicial + valorEntradas - valorSaidas;
-      const valorDiferenca = valorFinal - valorEsperado;
+      const valorDiferenca = dados.valorFinal - valorEsperado;
       
       // Atualizar caixa
       const caixaFechado: FechamentoCaixa = {
         ...caixaAtual,
-        dataFechamento: new Date().toISOString(),
-        valorFinal,
+        dataFechamento: dados.data,
+        valorFinal: dados.valorFinal,
         valorEntradas,
         valorSaidas,
         valorDiferenca,
-        funcionarioFechamentoId: funcionarioId,
-        observacao: observacao || caixaAtual.observacao,
+        funcionarioFechamentoId: 1, // Usuário logado
+        observacao: dados.observacao || caixaAtual.observacao,
         status: 'fechado'
       };
       
-      setFechamentos(fechamentos.map(f => 
+      setFechamentos(prev => prev.map(f => 
         f.id === caixaAtual.id ? caixaFechado : f
       ));
       
@@ -174,13 +257,13 @@ export const useCaixa = () => {
     }
   };
 
-  const registrarMovimentacao = async (movimentacao: Omit<MovimentacaoCaixa, 'id' | 'data'>) => {
+  const registrarMovimentacao = async (movimentacao: any) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Verificar se existe um caixa aberto
-      if (!caixaAtual && (movimentacao.vendaId === undefined)) {
+      // Verificar se existe um caixa aberto para movimentações manuais
+      if (!caixaAtual && !movimentacao.vendaId) {
         setError('Não existe um caixa aberto');
         return null;
       }
@@ -189,12 +272,19 @@ export const useCaixa = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const novaMovimentacao: MovimentacaoCaixa = {
-        ...movimentacao,
         id: Math.max(...movimentacoes.map(m => m.id), 0) + 1,
-        data: new Date().toISOString()
+        data: movimentacao.data,
+        tipo: movimentacao.tipo,
+        categoria: movimentacao.tipo === 'entrada' ? 'Venda' : 'Despesa',
+        descricao: movimentacao.descricao,
+        valor: movimentacao.valor,
+        formaPagamento: movimentacao.formaPagamento,
+        vendaId: movimentacao.vendaId,
+        funcionarioId: 1, // Usuário logado
+        observacao: movimentacao.observacao
       };
       
-      setMovimentacoes([...movimentacoes, novaMovimentacao]);
+      setMovimentacoes(prev => [...prev, novaMovimentacao]);
       
       return novaMovimentacao;
     } catch (err) {
@@ -205,25 +295,25 @@ export const useCaixa = () => {
     }
   };
 
-  const getMovimentacoesPorPeriodo = (dataInicio: string, dataFim: string) => {
+  const getMovimentacoesPorPeriodo = useCallback((dataInicio: string, dataFim: string) => {
     return movimentacoes.filter(m => 
       m.data >= dataInicio && 
       m.data <= dataFim
     );
-  };
+  }, [movimentacoes]);
 
-  const getMovimentacoesPorCategoria = (categoria: string) => {
+  const getMovimentacoesPorCategoria = useCallback((categoria: string) => {
     return movimentacoes.filter(m => m.categoria === categoria);
-  };
+  }, [movimentacoes]);
 
-  const getFechamentosPorPeriodo = (dataInicio: string, dataFim: string) => {
+  const getFechamentosPorPeriodo = useCallback((dataInicio: string, dataFim: string) => {
     return fechamentos.filter(f => 
       f.dataAbertura >= dataInicio && 
       (f.status === 'aberto' || f.dataFechamento <= dataFim)
     );
-  };
+  }, [fechamentos]);
 
-  const getResumoFinanceiro = (dataInicio: string, dataFim: string) => {
+  const getResumoFinanceiro = useCallback((dataInicio: string, dataFim: string) => {
     const movimentacoesPeriodo = getMovimentacoesPorPeriodo(dataInicio, dataFim);
     
     const totalEntradas = movimentacoesPeriodo
@@ -271,17 +361,13 @@ export const useCaixa = () => {
       categorias,
       formasPagamento
     };
-  };
-
-  useEffect(() => {
-    fetchMovimentacoes();
-    fetchFechamentos();
-  }, []);
+  }, [getMovimentacoesPorPeriodo]);
 
   return {
     movimentacoes,
     fechamentos,
     caixaAtual,
+    saldoAtual,
     isLoading,
     error,
     abrirCaixa,
