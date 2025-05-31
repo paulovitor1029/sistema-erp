@@ -1,70 +1,66 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCaixa, MovimentacaoCaixa } from '../hooks/useCaixa';
-import { useFuncionarios } from '../../usuarios/hooks/useFuncionarios';
+import { useCaixa } from '../hooks/useCaixa';
+import { useProdutos } from '../../produtos/hooks/useProdutos';
+import { useClientes } from '../../clientes/hooks/useClientes';
 import { useAuth } from '../../auth/context/AuthContext';
 
 const CaixaPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { 
-    movimentacoes, 
-    caixaAtual, 
-    isLoading, 
-    error, 
-    abrirCaixa, 
-    fecharCaixa, 
-    registrarMovimentacao,
-    recarregarMovimentacoes,
-    recarregarFechamentos
-  } = useCaixa();
-  const { funcionarios } = useFuncionarios();
   const { hasPermission } = useAuth();
+  const { movimentacoes, saldoAtual, registrarMovimentacao, fecharCaixa, abrirCaixa, caixaAberto } = useCaixa();
+  const { produtos } = useProdutos();
+  const { clientes } = useClientes();
   
-  const [filtro, setFiltro] = useState('');
-  const [tipoFiltro, setTipoFiltro] = useState('todos');
-  const [categoriaFiltro, setCategoriaFiltro] = useState('');
-  const [dataInicioFiltro, setDataInicioFiltro] = useState('');
-  const [dataFimFiltro, setDataFimFiltro] = useState('');
-  const [movimentacoesFiltradas, setMovimentacoesFiltradas] = useState<MovimentacaoCaixa[]>([]);
+  // Estados para movimentação
+  const [tipo, setTipo] = useState<'entrada' | 'saida'>('entrada');
+  const [descricao, setDescricao] = useState('');
+  const [valor, setValor] = useState('');
+  const [formaPagamento, setFormaPagamento] = useState('dinheiro');
+  const [codigoBarras, setCodigoBarras] = useState('');
+  const [produtoSelecionado, setProdutoSelecionado] = useState<number | null>(null);
+  const [clienteSelecionado, setClienteSelecionado] = useState<number | null>(null);
+  const [quantidade, setQuantidade] = useState('1');
   
-  const [valorInicial, setValorInicial] = useState(0);
-  const [valorFinal, setValorFinal] = useState(0);
+  // Estados para abertura/fechamento de caixa
+  const [valorInicial, setValorInicial] = useState('');
+  const [valorFinal, setValorFinal] = useState('');
   const [observacao, setObservacao] = useState('');
   
-  const [novaMovimentacao, setNovaMovimentacao] = useState({
-    tipo: 'entrada' as 'entrada' | 'saida',
-    categoria: '',
-    descricao: '',
-    valor: 0,
-    formaPagamento: 'dinheiro',
-    observacao: ''
-  });
+  // Estados de UI
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showAbrirCaixaModal, setShowAbrirCaixaModal] = useState(false);
+  const [showFecharCaixaModal, setShowFecharCaixaModal] = useState(false);
   
-  const [mostrarFormAbertura, setMostrarFormAbertura] = useState(false);
-  const [mostrarFormFechamento, setMostrarFormFechamento] = useState(false);
-  const [mostrarFormMovimentacao, setMostrarFormMovimentacao] = useState(false);
+  // Filtros para movimentações
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [tipoFiltro, setTipoFiltro] = useState('todos');
+  const [movimentacoesFiltradas, setMovimentacoesFiltradas] = useState(movimentacoes);
   
   // Definir data inicial e final do dia atual para filtro
   useEffect(() => {
     const hoje = new Date();
-    const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-    const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59);
+    const dataHoje = hoje.toISOString().split('T')[0];
     
-    setDataInicioFiltro(inicioHoje.toISOString().split('T')[0]);
-    setDataFimFiltro(fimHoje.toISOString().split('T')[0]);
+    setDataInicio(dataHoje);
+    setDataFim(dataHoje);
   }, []);
   
   // Aplicar filtros
   useEffect(() => {
     let resultado = [...movimentacoes];
     
-    // Filtro por descrição
-    if (filtro) {
-      const termoLowerCase = filtro.toLowerCase();
-      resultado = resultado.filter(m => 
-        m.descricao.toLowerCase().includes(termoLowerCase)
-      );
+    // Filtro por data de início
+    if (dataInicio) {
+      resultado = resultado.filter(m => m.data >= dataInicio);
+    }
+    
+    // Filtro por data de fim
+    if (dataFim) {
+      resultado = resultado.filter(m => m.data <= dataFim);
     }
     
     // Filtro por tipo
@@ -72,120 +68,189 @@ const CaixaPage = () => {
       resultado = resultado.filter(m => m.tipo === tipoFiltro);
     }
     
-    // Filtro por categoria
-    if (categoriaFiltro) {
-      resultado = resultado.filter(m => m.categoria === categoriaFiltro);
-    }
-    
-    // Filtro por data de início
-    if (dataInicioFiltro) {
-      const dataInicio = new Date(dataInicioFiltro);
-      dataInicio.setHours(0, 0, 0, 0);
-      resultado = resultado.filter(m => new Date(m.data) >= dataInicio);
-    }
-    
-    // Filtro por data de fim
-    if (dataFimFiltro) {
-      const dataFim = new Date(dataFimFiltro);
-      dataFim.setHours(23, 59, 59, 999);
-      resultado = resultado.filter(m => new Date(m.data) <= dataFim);
-    }
-    
-    // Ordenar por data (mais recente primeiro)
-    resultado.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    // Ordenar por data e hora (mais recente primeiro)
+    resultado.sort((a, b) => {
+      const dataA = new Date(`${a.data}T${a.hora}`).getTime();
+      const dataB = new Date(`${b.data}T${b.hora}`).getTime();
+      return dataB - dataA;
+    });
     
     setMovimentacoesFiltradas(resultado);
-  }, [movimentacoes, filtro, tipoFiltro, categoriaFiltro, dataInicioFiltro, dataFimFiltro]);
+  }, [movimentacoes, dataInicio, dataFim, tipoFiltro]);
   
-  // Extrair categorias únicas
-  const categorias = [...new Set(movimentacoes.map(m => m.categoria))];
+  // Buscar produto por código de barras
+  useEffect(() => {
+    if (codigoBarras.length >= 8) {
+      const produto = produtos.find(p => p.codigoBarras === codigoBarras);
+      if (produto) {
+        setProdutoSelecionado(produto.id);
+        setDescricao(`Venda - ${produto.nome}`);
+        setValor(produto.precoVenda.toString());
+        setCodigoBarras('');
+      }
+    }
+  }, [codigoBarras, produtos]);
+  
+  // Atualizar descrição e valor quando produto é selecionado
+  useEffect(() => {
+    if (produtoSelecionado) {
+      const produto = produtos.find(p => p.id === produtoSelecionado);
+      if (produto) {
+        setDescricao(`Venda - ${produto.nome}`);
+        const total = produto.precoVenda * parseInt(quantidade || '1');
+        setValor(total.toString());
+      }
+    }
+  }, [produtoSelecionado, quantidade, produtos]);
+  
+  const handleRegistrarMovimentacao = async () => {
+    if (!descricao || !valor) {
+      setError('Preencha a descrição e o valor');
+      return;
+    }
+    
+    if (!caixaAberto) {
+      setError('O caixa precisa estar aberto para registrar movimentações');
+      setShowAbrirCaixaModal(true);
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const valorNumerico = parseFloat(valor);
+      
+      if (isNaN(valorNumerico) || valorNumerico <= 0) {
+        setError('Valor inválido');
+        setIsLoading(false);
+        return;
+      }
+      
+      const movimentacaoData = {
+        tipo,
+        descricao,
+        valor: valorNumerico,
+        formaPagamento,
+        data: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().split(' ')[0],
+        produtoId: produtoSelecionado,
+        clienteId: clienteSelecionado,
+        quantidade: parseInt(quantidade || '1')
+      };
+      
+      const resultado = await registrarMovimentacao(movimentacaoData);
+      
+      if (resultado) {
+        setSuccess('Movimentação registrada com sucesso!');
+        // Limpar formulário
+        setDescricao('');
+        setValor('');
+        setProdutoSelecionado(null);
+        setClienteSelecionado(null);
+        setQuantidade('1');
+        
+        // Limpar mensagem de sucesso após 3 segundos
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
+      } else {
+        setError('Erro ao registrar movimentação');
+      }
+    } catch (err) {
+      setError('Erro ao processar a solicitação');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const handleAbrirCaixa = async () => {
-    if (!user) {
-      alert('Usuário não identificado');
+    if (!valorInicial) {
+      setError('Informe o valor inicial do caixa');
       return;
     }
     
-    if (valorInicial < 0) {
-      alert('O valor inicial não pode ser negativo');
-      return;
-    }
+    setIsLoading(true);
+    setError(null);
     
-    const resultado = await abrirCaixa(user.id, valorInicial, observacao);
-    
-    if (resultado) {
-      alert('Caixa aberto com sucesso!');
-      setValorInicial(0);
-      setObservacao('');
-      setMostrarFormAbertura(false);
-    } else {
-      alert('Erro ao abrir caixa. Verifique se já não existe um caixa aberto.');
+    try {
+      const valorInicialNumerico = parseFloat(valorInicial);
+      
+      if (isNaN(valorInicialNumerico) || valorInicialNumerico < 0) {
+        setError('Valor inicial inválido');
+        setIsLoading(false);
+        return;
+      }
+      
+      const resultado = await abrirCaixa({
+        valorInicial: valorInicialNumerico,
+        data: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().split(' ')[0],
+        observacao
+      });
+      
+      if (resultado) {
+        setSuccess('Caixa aberto com sucesso!');
+        setShowAbrirCaixaModal(false);
+        setValorInicial('');
+        setObservacao('');
+        
+        // Limpar mensagem de sucesso após 3 segundos
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
+      } else {
+        setError('Erro ao abrir caixa');
+      }
+    } catch (err) {
+      setError('Erro ao processar a solicitação');
+    } finally {
+      setIsLoading(false);
     }
   };
   
   const handleFecharCaixa = async () => {
-    if (!user) {
-      alert('Usuário não identificado');
+    if (!valorFinal) {
+      setError('Informe o valor final do caixa');
       return;
     }
     
-    if (valorFinal < 0) {
-      alert('O valor final não pode ser negativo');
-      return;
-    }
+    setIsLoading(true);
+    setError(null);
     
-    const resultado = await fecharCaixa(user.id, valorFinal, observacao);
-    
-    if (resultado) {
-      alert('Caixa fechado com sucesso!');
-      setValorFinal(0);
-      setObservacao('');
-      setMostrarFormFechamento(false);
-    } else {
-      alert('Erro ao fechar caixa. Verifique se existe um caixa aberto.');
-    }
-  };
-  
-  const handleRegistrarMovimentacao = async () => {
-    if (!user) {
-      alert('Usuário não identificado');
-      return;
-    }
-    
-    if (!novaMovimentacao.categoria) {
-      alert('Selecione uma categoria');
-      return;
-    }
-    
-    if (!novaMovimentacao.descricao) {
-      alert('Informe uma descrição');
-      return;
-    }
-    
-    if (novaMovimentacao.valor <= 0) {
-      alert('O valor deve ser maior que zero');
-      return;
-    }
-    
-    const resultado = await registrarMovimentacao({
-      ...novaMovimentacao,
-      funcionarioId: user.id
-    });
-    
-    if (resultado) {
-      alert('Movimentação registrada com sucesso!');
-      setNovaMovimentacao({
-        tipo: 'entrada',
-        categoria: '',
-        descricao: '',
-        valor: 0,
-        formaPagamento: 'dinheiro',
-        observacao: ''
+    try {
+      const valorFinalNumerico = parseFloat(valorFinal);
+      
+      if (isNaN(valorFinalNumerico) || valorFinalNumerico < 0) {
+        setError('Valor final inválido');
+        setIsLoading(false);
+        return;
+      }
+      
+      const resultado = await fecharCaixa({
+        valorFinal: valorFinalNumerico,
+        data: new Date().toISOString().split('T')[0],
+        hora: new Date().toTimeString().split(' ')[0],
+        observacao
       });
-      setMostrarFormMovimentacao(false);
-      recarregarMovimentacoes();
-    } else {
-      alert('Erro ao registrar movimentação. Verifique se existe um caixa aberto.');
+      
+      if (resultado) {
+        setSuccess('Caixa fechado com sucesso!');
+        setShowFecharCaixaModal(false);
+        setValorFinal('');
+        setObservacao('');
+        
+        // Limpar mensagem de sucesso após 3 segundos
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
+      } else {
+        setError('Erro ao fechar caixa');
+      }
+    } catch (err) {
+      setError('Erro ao processar a solicitação');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -196,81 +261,33 @@ const CaixaPage = () => {
     });
   };
   
-  const formatarData = (dataString: string) => {
-    const data = new Date(dataString);
-    return data.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-  
-  const getNomeFuncionario = (id: number) => {
-    const funcionario = funcionarios.find(f => f.id === id);
-    return funcionario ? funcionario.nome : 'Funcionário não encontrado';
-  };
-  
-  const getTipoMovimentacao = (tipo: string) => {
-    switch (tipo) {
-      case 'entrada':
-        return { texto: 'Entrada', classe: 'bg-green-100 text-green-800' };
-      case 'saida':
-        return { texto: 'Saída', classe: 'bg-red-100 text-red-800' };
-      default:
-        return { texto: tipo, classe: 'bg-gray-100 text-gray-800' };
-    }
-  };
-  
-  // Calcular totais
-  const totalEntradas = movimentacoesFiltradas
-    .filter(m => m.tipo === 'entrada')
-    .reduce((sum, m) => sum + m.valor, 0);
-  
-  const totalSaidas = movimentacoesFiltradas
-    .filter(m => m.tipo === 'saida')
-    .reduce((sum, m) => sum + m.valor, 0);
-  
-  const saldo = totalEntradas - totalSaidas;
-  
   return (
     <div className="container px-4 py-8 mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-3xl font-bold mb-4 md:mb-0">Controle de Caixa</h1>
         
         <div className="flex flex-col sm:flex-row gap-2">
-          {!caixaAtual ? (
+          {caixaAberto ? (
             <button
-              onClick={() => setMostrarFormAbertura(true)}
+              onClick={() => setShowFecharCaixaModal(true)}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              disabled={!hasPermission('operador')}
+            >
+              Fechar Caixa
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAbrirCaixaModal(true)}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               disabled={!hasPermission('operador')}
             >
               Abrir Caixa
             </button>
-          ) : (
-            <>
-              <button
-                onClick={() => setMostrarFormMovimentacao(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                disabled={!hasPermission('operador')}
-              >
-                Nova Movimentação
-              </button>
-              
-              <button
-                onClick={() => setMostrarFormFechamento(true)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                disabled={!hasPermission('operador')}
-              >
-                Fechar Caixa
-              </button>
-            </>
           )}
           
           <button
             onClick={() => navigate('/relatorios/caixa')}
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
             Relatórios
           </button>
@@ -278,128 +295,213 @@ const CaixaPage = () => {
       </div>
       
       {/* Status do Caixa */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 className="text-xl font-semibold mb-4">Status do Caixa</h2>
-        
-        {isLoading ? (
-          <div className="p-4 text-center">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
-            <p>Carregando status do caixa...</p>
-          </div>
-        ) : error ? (
-          <div className="p-4 text-center text-red-600">
-            <p>Erro ao carregar status do caixa: {error}</p>
-            <button
-              onClick={() => {
-                recarregarMovimentacoes();
-                recarregarFechamentos();
-              }}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Tentar Novamente
-            </button>
-          </div>
-        ) : caixaAtual ? (
+      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="bg-gray-50 p-4 rounded-md">
-                <div className="text-sm text-gray-500">Aberto em</div>
-                <div className="text-lg font-medium">{formatarData(caixaAtual.dataAbertura)}</div>
-                <div className="text-sm text-gray-500 mt-2">Por</div>
-                <div className="text-base">{getNomeFuncionario(caixaAtual.funcionarioAberturaId)}</div>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-md">
-                <div className="text-sm text-gray-500">Valor Inicial</div>
-                <div className="text-lg font-medium">{formatarMoeda(caixaAtual.valorInicial)}</div>
-                <div className="text-sm text-gray-500 mt-2">Status</div>
-                <div className="text-base font-medium text-green-600">Aberto</div>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-md">
-                <div className="text-sm text-gray-500">Movimentações</div>
-                <div className="flex justify-between">
-                  <div>
-                    <div className="text-sm text-gray-500">Entradas</div>
-                    <div className="text-base text-green-600">{formatarMoeda(totalEntradas)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-500">Saídas</div>
-                    <div className="text-base text-red-600">{formatarMoeda(totalSaidas)}</div>
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500 mt-2">Saldo Atual</div>
-                <div className={`text-lg font-medium ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatarMoeda(caixaAtual.valorInicial + saldo)}
-                </div>
+            <h2 className="text-lg font-semibold">Status do Caixa</h2>
+            <p className="text-sm text-gray-500">
+              {caixaAberto ? 'Caixa aberto' : 'Caixa fechado'}
+            </p>
+          </div>
+          
+          <div className="mt-4 md:mt-0">
+            <div className="text-sm text-gray-500">Saldo Atual</div>
+            <div className="text-2xl font-bold text-blue-600">{formatarMoeda(saldoAtual)}</div>
+          </div>
+        </div>
+      </div>
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {success && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+          <p>{success}</p>
+        </div>
+      )}
+      
+      {/* Formulário de Movimentação */}
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 className="text-lg font-semibold mb-4">Registrar Movimentação</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Movimentação
+              </label>
+              <div className="flex space-x-4">
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    value="entrada"
+                    checked={tipo === 'entrada'}
+                    onChange={() => setTipo('entrada')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Entrada</span>
+                </label>
+                
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    value="saida"
+                    checked={tipo === 'saida'}
+                    onChange={() => setTipo('saida')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Saída</span>
+                </label>
               </div>
             </div>
             
-            {caixaAtual.observacao && (
-              <div className="bg-yellow-50 p-4 rounded-md">
-                <div className="text-sm text-gray-500">Observação</div>
-                <div className="text-base">{caixaAtual.observacao}</div>
+            <div>
+              <label htmlFor="codigoBarras" className="block text-sm font-medium text-gray-700 mb-1">
+                Código de Barras (para vendas)
+              </label>
+              <input
+                type="text"
+                id="codigoBarras"
+                value={codigoBarras}
+                onChange={(e) => setCodigoBarras(e.target.value)}
+                placeholder="Escaneie ou digite o código de barras"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="produto" className="block text-sm font-medium text-gray-700 mb-1">
+                Produto
+              </label>
+              <select
+                id="produto"
+                value={produtoSelecionado || ''}
+                onChange={(e) => setProdutoSelecionado(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Selecione um produto</option>
+                {produtos.map((produto) => (
+                  <option key={produto.id} value={produto.id}>
+                    {produto.nome} - {formatarMoeda(produto.precoVenda)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="quantidade" className="block text-sm font-medium text-gray-700 mb-1">
+                Quantidade
+              </label>
+              <input
+                type="number"
+                id="quantidade"
+                value={quantidade}
+                onChange={(e) => setQuantidade(e.target.value)}
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
+                Descrição
+              </label>
+              <input
+                type="text"
+                id="descricao"
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Ex: Venda de produto, Pagamento de fornecedor"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="valor" className="block text-sm font-medium text-gray-700 mb-1">
+                Valor (R$)
+              </label>
+              <input
+                type="number"
+                id="valor"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                step="0.01"
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="formaPagamento" className="block text-sm font-medium text-gray-700 mb-1">
+                Forma de Pagamento
+              </label>
+              <select
+                id="formaPagamento"
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="dinheiro">Dinheiro</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="pix">PIX</option>
+                <option value="boleto">Boleto</option>
+                <option value="transferencia">Transferência</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="cliente" className="block text-sm font-medium text-gray-700 mb-1">
+                Cliente (opcional)
+              </label>
+              <select
+                id="cliente"
+                value={clienteSelecionado || ''}
+                onChange={(e) => setClienteSelecionado(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Selecione um cliente</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleRegistrarMovimentacao}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={isLoading || !caixaAberto}
+          >
+            {isLoading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <span>Registrando...</span>
               </div>
+            ) : (
+              'Registrar Movimentação'
             )}
-          </div>
-        ) : (
-          <div className="p-4 text-center text-gray-500">
-            <p>Não há caixa aberto no momento.</p>
-            <p className="mt-2">Clique em "Abrir Caixa" para iniciar as operações.</p>
-          </div>
-        )}
+          </button>
+        </div>
       </div>
       
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div>
-            <label htmlFor="filtro" className="block text-sm font-medium text-gray-700 mb-1">
-              Buscar por descrição
-            </label>
-            <input
-              type="text"
-              id="filtro"
-              value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
-              placeholder="Digite para buscar..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">
-              Tipo
-            </label>
-            <select
-              id="tipo"
-              value={tipoFiltro}
-              onChange={(e) => setTipoFiltro(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="todos">Todos os tipos</option>
-              <option value="entrada">Entradas</option>
-              <option value="saida">Saídas</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria
-            </label>
-            <select
-              id="categoria"
-              value={categoriaFiltro}
-              onChange={(e) => setCategoriaFiltro(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todas as categorias</option>
-              {categorias.map((categoria, index) => (
-                <option key={index} value={categoria}>{categoria}</option>
-              ))}
-            </select>
-          </div>
-          
+        <h2 className="text-lg font-semibold mb-4">Filtros</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label htmlFor="dataInicio" className="block text-sm font-medium text-gray-700 mb-1">
               Data Inicial
@@ -407,8 +509,8 @@ const CaixaPage = () => {
             <input
               type="date"
               id="dataInicio"
-              value={dataInicioFiltro}
-              onChange={(e) => setDataInicioFiltro(e.target.value)}
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -420,59 +522,29 @@ const CaixaPage = () => {
             <input
               type="date"
               id="dataFim"
-              value={dataFimFiltro}
-              onChange={(e) => setDataFimFiltro(e.target.value)}
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-        </div>
-        
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={() => {
-              setFiltro('');
-              setTipoFiltro('todos');
-              setCategoriaFiltro('');
-              
-              const hoje = new Date();
-              const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-              const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59);
-              
-              setDataInicioFiltro(inicioHoje.toISOString().split('T')[0]);
-              setDataFimFiltro(fimHoje.toISOString().split('T')[0]);
-            }}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-          >
-            Limpar Filtros
-          </button>
-        </div>
-      </div>
-      
-      {/* Resumo */}
-      {movimentacoesFiltradas.length > 0 && (
-        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-          <h2 className="text-lg font-semibold mb-4">Resumo do Período</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-green-50 p-4 rounded-md">
-              <div className="text-sm text-gray-500">Total de Entradas</div>
-              <div className="text-xl font-medium text-green-600">{formatarMoeda(totalEntradas)}</div>
-            </div>
-            
-            <div className="bg-red-50 p-4 rounded-md">
-              <div className="text-sm text-gray-500">Total de Saídas</div>
-              <div className="text-xl font-medium text-red-600">{formatarMoeda(totalSaidas)}</div>
-            </div>
-            
-            <div className={`${saldo >= 0 ? 'bg-blue-50' : 'bg-yellow-50'} p-4 rounded-md`}>
-              <div className="text-sm text-gray-500">Saldo</div>
-              <div className={`text-xl font-medium ${saldo >= 0 ? 'text-blue-600' : 'text-yellow-600'}`}>
-                {formatarMoeda(saldo)}
-              </div>
-            </div>
+          <div>
+            <label htmlFor="tipoFiltro" className="block text-sm font-medium text-gray-700 mb-1">
+              Tipo
+            </label>
+            <select
+              id="tipoFiltro"
+              value={tipoFiltro}
+              onChange={(e) => setTipoFiltro(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="todos">Todos</option>
+              <option value="entrada">Entradas</option>
+              <option value="saida">Saídas</option>
+            </select>
           </div>
         </div>
-      )}
+      </div>
       
       {/* Tabela de Movimentações */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -480,27 +552,9 @@ const CaixaPage = () => {
           <h2 className="text-xl font-semibold">Movimentações</h2>
         </div>
         
-        {isLoading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-            <p>Carregando movimentações...</p>
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center text-red-600">
-            <p>Erro ao carregar movimentações: {error}</p>
-            <button
-              onClick={recarregarMovimentacoes}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Tentar Novamente
-            </button>
-          </div>
-        ) : movimentacoesFiltradas.length === 0 ? (
+        {movimentacoesFiltradas.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <p>Nenhuma movimentação encontrada.</p>
-            {(filtro || tipoFiltro !== 'todos' || categoriaFiltro || dataInicioFiltro || dataFimFiltro) && (
-              <p className="mt-2">Tente ajustar os filtros para ver mais resultados.</p>
-            )}
+            <p>Nenhuma movimentação encontrada para o período selecionado.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -508,65 +562,56 @@ const CaixaPage = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categoria
+                    Data/Hora
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Descrição
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Valor
+                    Tipo
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Forma de Pagamento
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Responsável
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Valor
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {movimentacoesFiltradas.map((mov) => {
-                  const tipoInfo = getTipoMovimentacao(mov.tipo);
-                  
-                  return (
-                    <tr key={mov.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarData(mov.data)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${tipoInfo.classe}`}>
-                          {tipoInfo.texto}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {mov.categoria}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {mov.descricao}
-                        {mov.observacao && (
-                          <div className="text-xs text-gray-500 mt-1">{mov.observacao}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <span className={mov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>
-                          {formatarMoeda(mov.valor)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {mov.formaPagamento}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {getNomeFuncionario(mov.funcionarioId)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {movimentacoesFiltradas.map((movimentacao) => (
+                  <tr key={movimentacao.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(movimentacao.data).toLocaleDateString('pt-BR')} {movimentacao.hora}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {movimentacao.descricao}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        movimentacao.tipo === 'entrada' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {movimentacao.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {movimentacao.formaPagamento === 'dinheiro' && 'Dinheiro'}
+                      {movimentacao.formaPagamento === 'cartao_credito' && 'Cartão de Crédito'}
+                      {movimentacao.formaPagamento === 'cartao_debito' && 'Cartão de Débito'}
+                      {movimentacao.formaPagamento === 'pix' && 'PIX'}
+                      {movimentacao.formaPagamento === 'boleto' && 'Boleto'}
+                      {movimentacao.formaPagamento === 'transferencia' && 'Transferência'}
+                      {movimentacao.formaPagamento === 'outro' && 'Outro'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+                      <span className={movimentacao.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}>
+                        {formatarMoeda(movimentacao.valor)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -574,24 +619,25 @@ const CaixaPage = () => {
       </div>
       
       {/* Modal de Abertura de Caixa */}
-      {mostrarFormAbertura && (
+      {showAbrirCaixaModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
             <h2 className="text-xl font-semibold mb-4">Abrir Caixa</h2>
             
             <div className="space-y-4">
               <div>
                 <label htmlFor="valorInicial" className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor Inicial
+                  Valor Inicial (R$)
                 </label>
                 <input
                   type="number"
                   id="valorInicial"
-                  min="0"
-                  step="0.01"
                   value={valorInicial}
-                  onChange={(e) => setValorInicial(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setValorInicial(e.target.value)}
+                  step="0.01"
+                  min="0"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
               
@@ -605,68 +651,57 @@ const CaixaPage = () => {
                   onChange={(e) => setObservacao(e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Informações adicionais sobre a abertura do caixa..."
                 />
               </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                onClick={() => setShowAbrirCaixaModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancelar
+              </button>
               
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setMostrarFormAbertura(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleAbrirCaixa}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                >
-                  Abrir Caixa
-                </button>
-              </div>
+              <button
+                onClick={handleAbrirCaixa}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <span>Abrindo...</span>
+                  </div>
+                ) : (
+                  'Abrir Caixa'
+                )}
+              </button>
             </div>
           </div>
         </div>
       )}
       
       {/* Modal de Fechamento de Caixa */}
-      {mostrarFormFechamento && (
+      {showFecharCaixaModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
             <h2 className="text-xl font-semibold mb-4">Fechar Caixa</h2>
             
             <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-md mb-4">
-                <div className="text-sm text-gray-500">Valor Inicial</div>
-                <div className="text-base font-medium">{formatarMoeda(caixaAtual?.valorInicial || 0)}</div>
-                
-                <div className="text-sm text-gray-500 mt-2">Movimentações</div>
-                <div className="flex justify-between">
-                  <div>
-                    <div className="text-sm text-gray-500">Entradas</div>
-                    <div className="text-base text-green-600">{formatarMoeda(totalEntradas)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-500">Saídas</div>
-                    <div className="text-base text-red-600">{formatarMoeda(totalSaidas)}</div>
-                  </div>
-                </div>
-                
-                <div className="text-sm text-gray-500 mt-2">Saldo Esperado</div>
-                <div className="text-base font-medium">{formatarMoeda((caixaAtual?.valorInicial || 0) + totalEntradas - totalSaidas)}</div>
-              </div>
-              
               <div>
                 <label htmlFor="valorFinal" className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor Final em Caixa
+                  Valor Final (R$)
                 </label>
                 <input
                   type="number"
                   id="valorFinal"
-                  min="0"
-                  step="0.01"
                   value={valorFinal}
-                  onChange={(e) => setValorFinal(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setValorFinal(e.target.value)}
+                  step="0.01"
+                  min="0"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
               
@@ -680,185 +715,32 @@ const CaixaPage = () => {
                   onChange={(e) => setObservacao(e.target.value)}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Informações adicionais sobre o fechamento do caixa..."
                 />
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setMostrarFormFechamento(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleFecharCaixa}
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                >
-                  Fechar Caixa
-                </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Modal de Nova Movimentação */}
-      {mostrarFormMovimentacao && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-semibold mb-4">Nova Movimentação</h2>
             
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="tipoMovimentacao" className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo
-                </label>
-                <div className="flex space-x-4">
-                  <label className="inline-flex items-center">
-                    <input
-                      type="radio"
-                      name="tipoMovimentacao"
-                      value="entrada"
-                      checked={novaMovimentacao.tipo === 'entrada'}
-                      onChange={() => setNovaMovimentacao({...novaMovimentacao, tipo: 'entrada'})}
-                      className="form-radio h-4 w-4 text-blue-600"
-                    />
-                    <span className="ml-2 text-gray-700">Entrada</span>
-                  </label>
-                  <label className="inline-flex items-center">
-                    <input
-                      type="radio"
-                      name="tipoMovimentacao"
-                      value="saida"
-                      checked={novaMovimentacao.tipo === 'saida'}
-                      onChange={() => setNovaMovimentacao({...novaMovimentacao, tipo: 'saida'})}
-                      className="form-radio h-4 w-4 text-blue-600"
-                    />
-                    <span className="ml-2 text-gray-700">Saída</span>
-                  </label>
-                </div>
-              </div>
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                onClick={() => setShowFecharCaixaModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancelar
+              </button>
               
-              <div>
-                <label htmlFor="categoriaMovimentacao" className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoria
-                </label>
-                <input
-                  type="text"
-                  id="categoriaMovimentacao"
-                  list="categorias"
-                  value={novaMovimentacao.categoria}
-                  onChange={(e) => setNovaMovimentacao({...novaMovimentacao, categoria: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Digite ou selecione uma categoria"
-                />
-                <datalist id="categorias">
-                  {categorias.map((categoria, index) => (
-                    <option key={index} value={categoria} />
-                  ))}
-                  {novaMovimentacao.tipo === 'entrada' && (
-                    <>
-                      <option value="Venda" />
-                      <option value="Recebimento" />
-                      <option value="Empréstimo" />
-                      <option value="Investimento" />
-                    </>
-                  )}
-                  {novaMovimentacao.tipo === 'saida' && (
-                    <>
-                      <option value="Fornecedor" />
-                      <option value="Despesa" />
-                      <option value="Salário" />
-                      <option value="Imposto" />
-                      <option value="Aluguel" />
-                      <option value="Energia" />
-                      <option value="Água" />
-                      <option value="Internet" />
-                      <option value="Telefone" />
-                    </>
-                  )}
-                </datalist>
-              </div>
-              
-              <div>
-                <label htmlFor="descricaoMovimentacao" className="block text-sm font-medium text-gray-700 mb-1">
-                  Descrição
-                </label>
-                <input
-                  type="text"
-                  id="descricaoMovimentacao"
-                  value={novaMovimentacao.descricao}
-                  onChange={(e) => setNovaMovimentacao({...novaMovimentacao, descricao: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Descreva a movimentação"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="valorMovimentacao" className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor
-                </label>
-                <input
-                  type="number"
-                  id="valorMovimentacao"
-                  min="0.01"
-                  step="0.01"
-                  value={novaMovimentacao.valor}
-                  onChange={(e) => setNovaMovimentacao({...novaMovimentacao, valor: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              {novaMovimentacao.tipo === 'entrada' && (
-                <div>
-                  <label htmlFor="formaPagamento" className="block text-sm font-medium text-gray-700 mb-1">
-                    Forma de Pagamento
-                  </label>
-                  <select
-                    id="formaPagamento"
-                    value={novaMovimentacao.formaPagamento}
-                    onChange={(e) => setNovaMovimentacao({...novaMovimentacao, formaPagamento: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="dinheiro">Dinheiro</option>
-                    <option value="cartao_credito">Cartão de Crédito</option>
-                    <option value="cartao_debito">Cartão de Débito</option>
-                    <option value="pix">PIX</option>
-                    <option value="boleto">Boleto</option>
-                    <option value="transferencia">Transferência Bancária</option>
-                  </select>
-                </div>
-              )}
-              
-              <div>
-                <label htmlFor="observacaoMovimentacao" className="block text-sm font-medium text-gray-700 mb-1">
-                  Observação (opcional)
-                </label>
-                <textarea
-                  id="observacaoMovimentacao"
-                  value={novaMovimentacao.observacao}
-                  onChange={(e) => setNovaMovimentacao({...novaMovimentacao, observacao: e.target.value})}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Informações adicionais..."
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setMostrarFormMovimentacao(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleRegistrarMovimentacao}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Registrar
-                </button>
-              </div>
+              <button
+                onClick={handleFecharCaixa}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <span>Fechando...</span>
+                  </div>
+                ) : (
+                  'Fechar Caixa'
+                )}
+              </button>
             </div>
           </div>
         </div>

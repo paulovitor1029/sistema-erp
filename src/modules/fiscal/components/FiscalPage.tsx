@@ -1,847 +1,637 @@
-import { useState, useEffect, useRef } from 'react';
-import { useFiscal, ConfiguracaoFiscal, DocumentoFiscal } from '../hooks/useFiscal';
-import { Venda } from '../../pdv/hooks/usePDV';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useProdutos } from '../../produtos/hooks/useProdutos';
+import { useClientes } from '../../clientes/hooks/useClientes';
+import { useAuth } from '../../auth/context/AuthContext';
 
 const FiscalPage = () => {
-  const { 
-    configuracaoFiscal, 
-    documentosFiscais, 
-    isLoading, 
-    error,
-    salvarConfiguracaoFiscal,
-    cancelarDocumentoFiscal,
-    imprimirDANFE,
-    uploadCertificadoDigital,
-    testarConexaoSAT,
-    testarConexaoSEFAZ,
-    testarImpressora,
-    recarregarDocumentosFiscais
-  } = useFiscal();
+  const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const { produtos } = useProdutos();
+  const { clientes } = useClientes();
   
-  // Estados para configuração fiscal
-  const [configForm, setConfigForm] = useState<Partial<ConfiguracaoFiscal>>({
-    tipoEmissao: 'nenhum',
-    ambiente: 'homologacao',
-    impressoraModelo: 'elgin'
-  });
+  // Estados para emissão de nota
+  const [tipoNota, setTipoNota] = useState<'nfce' | 'sat'>('nfce');
+  const [clienteSelecionado, setClienteSelecionado] = useState<number | null>(null);
+  const [produtosSelecionados, setProdutosSelecionados] = useState<{id: number, quantidade: number}[]>([]);
+  const [observacoes, setObservacoes] = useState('');
+  const [formaPagamento, setFormaPagamento] = useState('dinheiro');
   
-  // Estados para upload de certificado
-  const [certificadoFile, setCertificadoFile] = useState<File | null>(null);
+  // Estados para busca de produtos
+  const [codigoBarras, setCodigoBarras] = useState('');
+  const [produtoBusca, setProdutoBusca] = useState('');
+  const [produtosFiltrados, setProdutosFiltrados] = useState(produtos);
+  
+  // Estados de UI
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showCertificadoModal, setShowCertificadoModal] = useState(false);
   const [certificadoSenha, setCertificadoSenha] = useState('');
+  const [certificadoArquivo, setCertificadoArquivo] = useState<string | null>(null);
   
-  // Estados para cancelamento de documento
-  const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFiscal | null>(null);
-  const [justificativaCancelamento, setJustificativaCancelamento] = useState('');
+  // Histórico de notas emitidas (simulado)
+  const [notasEmitidas, setNotasEmitidas] = useState<any[]>([]);
   
-  // Estados para filtros
-  const [filtroTipo, setFiltroTipo] = useState<string>('');
-  const [filtroStatus, setFiltroStatus] = useState<string>('');
-  const [filtroDataInicio, setFiltroDataInicio] = useState<string>('');
-  const [filtroDataFim, setFiltroDataFim] = useState<string>('');
-  
-  // Estados para modais
-  const [mostrarModalCancelamento, setMostrarModalCancelamento] = useState(false);
-  const [mostrarModalCertificado, setMostrarModalCertificado] = useState(false);
-  const [mostrarModalDetalhes, setMostrarModalDetalhes] = useState(false);
-  
-  // Referência para input de arquivo
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Inicializar formulário com configuração atual
+  // Filtrar produtos com base na busca
   useEffect(() => {
-    if (configuracaoFiscal) {
-      setConfigForm({
-        tipoEmissao: configuracaoFiscal.tipoEmissao,
-        ambiente: configuracaoFiscal.ambiente,
-        satModelo: configuracaoFiscal.satModelo,
-        satCodigoAtivacao: configuracaoFiscal.satCodigoAtivacao,
-        satCnpj: configuracaoFiscal.satCnpj,
-        nfceToken: configuracaoFiscal.nfceToken,
-        nfceCSC: configuracaoFiscal.nfceCSC,
-        nfceIdCSC: configuracaoFiscal.nfceIdCSC,
-        impressoraTermica: configuracaoFiscal.impressoraTermica,
-        impressoraModelo: configuracaoFiscal.impressoraModelo,
-        impressoraPorta: configuracaoFiscal.impressoraPorta
+    if (produtoBusca) {
+      const termoBusca = produtoBusca.toLowerCase();
+      const filtrados = produtos.filter(p => 
+        p.nome.toLowerCase().includes(termoBusca) || 
+        p.codigoBarras.includes(termoBusca)
+      );
+      setProdutosFiltrados(filtrados);
+    } else {
+      setProdutosFiltrados(produtos);
+    }
+  }, [produtoBusca, produtos]);
+  
+  // Buscar produto por código de barras
+  useEffect(() => {
+    if (codigoBarras.length >= 8) {
+      const produto = produtos.find(p => p.codigoBarras === codigoBarras);
+      if (produto) {
+        adicionarProduto(produto.id);
+        setCodigoBarras('');
+      }
+    }
+  }, [codigoBarras, produtos]);
+  
+  const adicionarProduto = (produtoId: number) => {
+    // Verificar se o produto já está na lista
+    const produtoExistente = produtosSelecionados.find(p => p.id === produtoId);
+    
+    if (produtoExistente) {
+      // Incrementar quantidade
+      setProdutosSelecionados(
+        produtosSelecionados.map(p => 
+          p.id === produtoId ? { ...p, quantidade: p.quantidade + 1 } : p
+        )
+      );
+    } else {
+      // Adicionar novo produto
+      setProdutosSelecionados([
+        ...produtosSelecionados,
+        { id: produtoId, quantidade: 1 }
+      ]);
+    }
+  };
+  
+  const removerProduto = (produtoId: number) => {
+    setProdutosSelecionados(produtosSelecionados.filter(p => p.id !== produtoId));
+  };
+  
+  const alterarQuantidade = (produtoId: number, quantidade: number) => {
+    if (quantidade <= 0) {
+      removerProduto(produtoId);
+      return;
+    }
+    
+    setProdutosSelecionados(
+      produtosSelecionados.map(p => 
+        p.id === produtoId ? { ...p, quantidade } : p
+      )
+    );
+  };
+  
+  const calcularTotal = () => {
+    return produtosSelecionados.reduce((total, item) => {
+      const produto = produtos.find(p => p.id === item.id);
+      if (produto) {
+        return total + (produto.precoVenda * item.quantidade);
+      }
+      return total;
+    }, 0);
+  };
+  
+  const handleEmitirNota = async () => {
+    if (produtosSelecionados.length === 0) {
+      setError('Selecione pelo menos um produto');
+      return;
+    }
+    
+    if (tipoNota === 'nfce' && !clienteSelecionado) {
+      setError('Selecione um cliente para emitir NFC-e');
+      return;
+    }
+    
+    if (tipoNota === 'nfce' && !certificadoArquivo) {
+      setShowCertificadoModal(true);
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Simulação de emissão de nota
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const cliente = clienteSelecionado 
+        ? clientes.find(c => c.id === clienteSelecionado) 
+        : null;
+      
+      const itens = produtosSelecionados.map(item => {
+        const produto = produtos.find(p => p.id === item.id);
+        return {
+          produto: produto?.nome,
+          quantidade: item.quantidade,
+          valorUnitario: produto?.precoVenda,
+          valorTotal: produto ? produto.precoVenda * item.quantidade : 0
+        };
       });
-    }
-  }, [configuracaoFiscal]);
-  
-  // Aplicar filtros aos documentos fiscais
-  const documentosFiltrados = documentosFiscais.filter(documento => {
-    // Filtro por tipo
-    if (filtroTipo && documento.tipo !== filtroTipo) return false;
-    
-    // Filtro por status
-    if (filtroStatus && documento.status !== filtroStatus) return false;
-    
-    // Filtro por data de início
-    if (filtroDataInicio) {
-      const dataInicio = new Date(filtroDataInicio);
-      const dataDocumento = new Date(documento.dataEmissao);
-      if (dataDocumento < dataInicio) return false;
-    }
-    
-    // Filtro por data de fim
-    if (filtroDataFim) {
-      const dataFim = new Date(filtroDataFim);
-      dataFim.setHours(23, 59, 59); // Ajustar para o final do dia
-      const dataDocumento = new Date(documento.dataEmissao);
-      if (dataDocumento > dataFim) return false;
-    }
-    
-    return true;
-  });
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setConfigForm({
-      ...configForm,
-      [name]: value,
-    });
-  };
-  
-  const handleSalvarConfiguracao = async () => {
-    try {
-      await salvarConfiguracaoFiscal(configForm);
-      alert('Configuração fiscal salva com sucesso!');
+      
+      const novaNota = {
+        id: notasEmitidas.length + 1,
+        tipo: tipoNota,
+        cliente: cliente?.nome || 'Consumidor Final',
+        data: new Date().toISOString(),
+        itens,
+        valorTotal: calcularTotal(),
+        formaPagamento,
+        observacoes,
+        status: 'emitida',
+        chave: tipoNota === 'nfce' 
+          ? `${Math.floor(Math.random() * 10000)}${Math.floor(Math.random() * 10000)}${Math.floor(Math.random() * 10000)}${Math.floor(Math.random() * 10000)}`
+          : `${Math.floor(Math.random() * 1000000)}`,
+      };
+      
+      setNotasEmitidas([novaNota, ...notasEmitidas]);
+      
+      setSuccess(`${tipoNota === 'nfce' ? 'NFC-e' : 'SAT'} emitida com sucesso!`);
+      
+      // Limpar formulário
+      setProdutosSelecionados([]);
+      setClienteSelecionado(null);
+      setObservacoes('');
+      
+      // Limpar mensagem de sucesso após 5 segundos
+      setTimeout(() => {
+        setSuccess(null);
+      }, 5000);
     } catch (err) {
-      alert('Erro ao salvar configuração fiscal. Por favor, tente novamente.');
-      console.error(err);
+      setError('Erro ao emitir nota fiscal');
+    } finally {
+      setIsLoading(false);
     }
   };
   
-  const handleUploadCertificado = async () => {
-    if (!certificadoFile) {
-      alert('Por favor, selecione um arquivo de certificado');
-      return;
-    }
+  const handleUploadCertificado = () => {
+    // Simulação de upload de certificado
+    setCertificadoArquivo('certificado_a1.pfx');
+    setShowCertificadoModal(false);
+    setSuccess('Certificado A1 carregado com sucesso!');
     
-    if (!certificadoSenha) {
-      alert('Por favor, informe a senha do certificado');
-      return;
-    }
-    
-    try {
-      await uploadCertificadoDigital(certificadoFile, certificadoSenha);
-      alert('Certificado digital instalado com sucesso!');
-      setMostrarModalCertificado(false);
-      setCertificadoFile(null);
-      setCertificadoSenha('');
-    } catch (err) {
-      alert('Erro ao instalar certificado digital. Por favor, tente novamente.');
-      console.error(err);
-    }
+    // Limpar mensagem de sucesso após 3 segundos
+    setTimeout(() => {
+      setSuccess(null);
+    }, 3000);
   };
   
-  const handleCancelarDocumento = async () => {
-    if (!documentoSelecionado) {
-      alert('Nenhum documento selecionado');
-      return;
-    }
-    
-    if (justificativaCancelamento.length < 15) {
-      alert('A justificativa deve ter pelo menos 15 caracteres');
-      return;
-    }
-    
-    try {
-      await cancelarDocumentoFiscal(documentoSelecionado.id, justificativaCancelamento);
-      alert('Documento fiscal cancelado com sucesso!');
-      setMostrarModalCancelamento(false);
-      setDocumentoSelecionado(null);
-      setJustificativaCancelamento('');
-      recarregarDocumentosFiscais();
-    } catch (err) {
-      alert('Erro ao cancelar documento fiscal. Por favor, tente novamente.');
-      console.error(err);
-    }
-  };
-  
-  const handleImprimirDANFE = async (documentoId: number) => {
-    try {
-      await imprimirDANFE(documentoId);
-      alert('DANFE enviado para impressão com sucesso!');
-    } catch (err) {
-      alert('Erro ao imprimir DANFE. Por favor, tente novamente.');
-      console.error(err);
-    }
-  };
-  
-  const handleTestarConexaoSAT = async () => {
-    try {
-      const resultado = await testarConexaoSAT();
-      if (resultado) {
-        alert('Conexão com o SAT estabelecida com sucesso!');
-      } else {
-        alert('Não foi possível estabelecer conexão com o SAT. Verifique as configurações.');
-      }
-    } catch (err) {
-      alert('Erro ao testar conexão com o SAT. Por favor, tente novamente.');
-      console.error(err);
-    }
-  };
-  
-  const handleTestarConexaoSEFAZ = async () => {
-    try {
-      const resultado = await testarConexaoSEFAZ();
-      if (resultado) {
-        alert('Conexão com a SEFAZ estabelecida com sucesso!');
-      } else {
-        alert('Não foi possível estabelecer conexão com a SEFAZ. Verifique as configurações e o certificado digital.');
-      }
-    } catch (err) {
-      alert('Erro ao testar conexão com a SEFAZ. Por favor, tente novamente.');
-      console.error(err);
-    }
-  };
-  
-  const handleTestarImpressora = async () => {
-    try {
-      const resultado = await testarImpressora();
-      if (resultado) {
-        alert('Teste de impressão enviado com sucesso!');
-      } else {
-        alert('Não foi possível enviar o teste para a impressora. Verifique as configurações.');
-      }
-    } catch (err) {
-      alert('Erro ao testar impressora. Por favor, tente novamente.');
-      console.error(err);
-    }
-  };
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setCertificadoFile(e.target.files[0]);
-    }
-  };
-  
-  const handleAbrirSelecionarArquivo = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-  
-  const limparFiltros = () => {
-    setFiltroTipo('');
-    setFiltroStatus('');
-    setFiltroDataInicio('');
-    setFiltroDataFim('');
-  };
-  
-  const formatarData = (dataString: string) => {
-    return new Date(dataString).toLocaleString('pt-BR');
-  };
-  
-  const formatarValor = (valor: number) => {
+  const formatarMoeda = (valor: number) => {
     return valor.toLocaleString('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     });
   };
   
+  const formatarData = (dataString: string) => {
+    const data = new Date(dataString);
+    return data.toLocaleDateString('pt-BR') + ' ' + data.toLocaleTimeString('pt-BR');
+  };
+  
   return (
     <div className="container px-4 py-8 mx-auto">
-      <h1 className="mb-6 text-3xl font-bold text-center">Emissão Fiscal</h1>
-      
-      {/* Configuração Fiscal */}
-      <div className="p-6 mb-8 bg-white rounded-lg shadow-md">
-        <h2 className="mb-4 text-xl font-semibold">Configuração Fiscal</h2>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <h1 className="text-3xl font-bold mb-4 md:mb-0">Emissão Fiscal</h1>
         
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className="block mb-1 text-sm font-medium">Tipo de Emissão *</label>
-            <select
-              name="tipoEmissao"
-              value={configForm.tipoEmissao}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="nenhum">Nenhum (Apenas Cupom Não Fiscal)</option>
-              <option value="nfce">NFC-e (Nota Fiscal de Consumidor Eletrônica)</option>
-              <option value="sat">SAT Fiscal (Sistema Autenticador e Transmissor)</option>
-            </select>
-          </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => navigate('/configuracoes/fiscal')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Configurações Fiscais
+          </button>
           
-          <div>
-            <label className="block mb-1 text-sm font-medium">Ambiente *</label>
-            <select
-              name="ambiente"
-              value={configForm.ambiente}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="homologacao">Homologação (Testes)</option>
-              <option value="producao">Produção</option>
-            </select>
-          </div>
-          
-          <div className="flex items-center">
-            <div className="flex items-center space-x-2">
-              <span className={`inline-block w-3 h-3 rounded-full ${configuracaoFiscal?.certificadoInstalado ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className="text-sm font-medium">
-                Certificado Digital: {configuracaoFiscal?.certificadoInstalado ? 'Instalado' : 'Não Instalado'}
-              </span>
-            </div>
-            
+          {!certificadoArquivo && (
             <button
-              onClick={() => setMostrarModalCertificado(true)}
-              className="px-3 py-1 ml-4 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              onClick={() => setShowCertificadoModal(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
             >
-              {configuracaoFiscal?.certificadoInstalado ? 'Atualizar' : 'Instalar'}
+              Carregar Certificado A1
             </button>
-          </div>
+          )}
         </div>
+      </div>
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {success && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+          <p>{success}</p>
+        </div>
+      )}
+      
+      {/* Formulário de Emissão */}
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 className="text-lg font-semibold mb-4">Emissão de Documento Fiscal</h2>
         
-        {/* Configurações específicas para NFC-e */}
-        {configForm.tipoEmissao === 'nfce' && (
-          <div className="grid grid-cols-1 gap-4 mt-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Coluna 1: Tipo de Nota e Cliente */}
+          <div className="space-y-4">
             <div>
-              <label className="block mb-1 text-sm font-medium">Token</label>
-              <input
-                type="text"
-                name="nfceToken"
-                value={configForm.nfceToken || ''}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="Token de integração"
-              />
+              <label htmlFor="tipoNota" className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Documento
+              </label>
+              <div className="flex space-x-4">
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    value="nfce"
+                    checked={tipoNota === 'nfce'}
+                    onChange={() => setTipoNota('nfce')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">NFC-e</span>
+                </label>
+                
+                <label className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    value="sat"
+                    checked={tipoNota === 'sat'}
+                    onChange={() => setTipoNota('sat')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">SAT Fiscal</span>
+                </label>
+              </div>
             </div>
             
             <div>
-              <label className="block mb-1 text-sm font-medium">CSC (Código de Segurança do Contribuinte)</label>
-              <input
-                type="text"
-                name="nfceCSC"
-                value={configForm.nfceCSC || ''}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="CSC fornecido pela SEFAZ"
-              />
-            </div>
-            
-            <div>
-              <label className="block mb-1 text-sm font-medium">ID do CSC</label>
-              <input
-                type="text"
-                name="nfceIdCSC"
-                value={configForm.nfceIdCSC || ''}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="ID do CSC fornecido pela SEFAZ"
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* Configurações específicas para SAT */}
-        {configForm.tipoEmissao === 'sat' && (
-          <div className="grid grid-cols-1 gap-4 mt-4 md:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="block mb-1 text-sm font-medium">Modelo do SAT</label>
+              <label htmlFor="cliente" className="block text-sm font-medium text-gray-700 mb-1">
+                Cliente {tipoNota === 'nfce' && '*'}
+              </label>
               <select
-                name="satModelo"
-                value={configForm.satModelo || 'sat_fiscal'}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                id="cliente"
+                value={clienteSelecionado || ''}
+                onChange={(e) => setClienteSelecionado(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required={tipoNota === 'nfce'}
               >
-                <option value="sat_fiscal">SAT Fiscal (Padrão)</option>
-                <option value="sat_fiscal_cdecl">SAT Fiscal (CDECL)</option>
-                <option value="sat_fiscal_dll">SAT Fiscal (DLL)</option>
+                <option value="">Consumidor Final</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nome} - {cliente.cpfCnpj}
+                  </option>
+                ))}
               </select>
             </div>
             
             <div>
-              <label className="block mb-1 text-sm font-medium">Código de Ativação</label>
+              <label htmlFor="formaPagamento" className="block text-sm font-medium text-gray-700 mb-1">
+                Forma de Pagamento
+              </label>
+              <select
+                id="formaPagamento"
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="dinheiro">Dinheiro</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="pix">PIX</option>
+                <option value="boleto">Boleto</option>
+                <option value="transferencia">Transferência</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700 mb-1">
+                Observações
+              </label>
+              <textarea
+                id="observacoes"
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          
+          {/* Coluna 2: Busca de Produtos */}
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="codigoBarras" className="block text-sm font-medium text-gray-700 mb-1">
+                Código de Barras
+              </label>
               <input
-                type="password"
-                name="satCodigoAtivacao"
-                value={configForm.satCodigoAtivacao || ''}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="Código de ativação do SAT"
+                type="text"
+                id="codigoBarras"
+                value={codigoBarras}
+                onChange={(e) => setCodigoBarras(e.target.value)}
+                placeholder="Escaneie ou digite o código de barras"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             
             <div>
-              <label className="block mb-1 text-sm font-medium">CNPJ do Contribuinte</label>
+              <label htmlFor="produtoBusca" className="block text-sm font-medium text-gray-700 mb-1">
+                Buscar Produto
+              </label>
               <input
                 type="text"
-                name="satCnpj"
-                value={configForm.satCnpj || ''}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="CNPJ vinculado ao SAT"
+                id="produtoBusca"
+                value={produtoBusca}
+                onChange={(e) => setProdutoBusca(e.target.value)}
+                placeholder="Digite o nome do produto"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-          </div>
-        )}
-        
-        {/* Configurações de Impressora */}
-        <div className="grid grid-cols-1 gap-4 mt-4 md:grid-cols-3">
-          <div>
-            <label className="block mb-1 text-sm font-medium">Impressora Térmica</label>
-            <input
-              type="text"
-              name="impressoraTermica"
-              value={configForm.impressoraTermica || ''}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="Nome da impressora térmica"
-            />
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Produtos Encontrados
+              </label>
+              <div className="border border-gray-300 rounded-md h-64 overflow-y-auto p-2">
+                {produtosFiltrados.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">Nenhum produto encontrado</p>
+                ) : (
+                  <div className="space-y-2">
+                    {produtosFiltrados.map((produto) => (
+                      <div key={produto.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-md">
+                        <div>
+                          <div className="text-sm font-medium">{produto.nome}</div>
+                          <div className="text-xs text-gray-500">Código: {produto.codigoBarras}</div>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="text-sm font-medium mr-2">{formatarMoeda(produto.precoVenda)}</div>
+                          <button
+                            onClick={() => adicionarProduto(produto.id)}
+                            className="p-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200"
+                            title="Adicionar"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           
-          <div>
-            <label className="block mb-1 text-sm font-medium">Modelo da Impressora</label>
-            <select
-              name="impressoraModelo"
-              value={configForm.impressoraModelo || 'elgin'}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="elgin">Elgin</option>
-              <option value="daruma">Daruma</option>
-              <option value="bematech">Bematech</option>
-              <option value="epson">Epson</option>
-              <option value="outro">Outro</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block mb-1 text-sm font-medium">Porta da Impressora</label>
-            <input
-              type="text"
-              name="impressoraPorta"
-              value={configForm.impressoraPorta || ''}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              placeholder="USB, COM1, TCP/IP, etc."
-            />
-          </div>
-        </div>
-        
-        {/* Botões de Ação */}
-        <div className="flex flex-wrap justify-between mt-6">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleSalvarConfiguracao}
-              className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-            >
-              Salvar Configuração
-            </button>
+          {/* Coluna 3: Produtos Selecionados */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Produtos Selecionados
+              </label>
+              <div className="border border-gray-300 rounded-md h-64 overflow-y-auto p-2">
+                {produtosSelecionados.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">Nenhum produto selecionado</p>
+                ) : (
+                  <div className="space-y-2">
+                    {produtosSelecionados.map((item) => {
+                      const produto = produtos.find(p => p.id === item.id);
+                      if (!produto) return null;
+                      
+                      return (
+                        <div key={item.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-md">
+                          <div>
+                            <div className="text-sm font-medium">{produto.nome}</div>
+                            <div className="text-xs text-gray-500">
+                              {formatarMoeda(produto.precoVenda)} x {item.quantidade} = {formatarMoeda(produto.precoVenda * item.quantidade)}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => alterarQuantidade(item.id, item.quantidade - 1)}
+                              className="p-1 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+                              title="Diminuir"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                              </svg>
+                            </button>
+                            
+                            <span className="text-sm font-medium w-6 text-center">{item.quantidade}</span>
+                            
+                            <button
+                              onClick={() => alterarQuantidade(item.id, item.quantidade + 1)}
+                              className="p-1 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+                              title="Aumentar"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                            </button>
+                            
+                            <button
+                              onClick={() => removerProduto(item.id)}
+                              className="p-1 bg-red-100 text-red-600 rounded-md hover:bg-red-200"
+                              title="Remover"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
             
-            {configForm.tipoEmissao === 'nfce' && (
-              <button
-                onClick={handleTestarConexaoSEFAZ}
-                className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
-                disabled={!configuracaoFiscal?.certificadoInstalado}
-              >
-                Testar Conexão SEFAZ
-              </button>
-            )}
+            <div className="bg-gray-50 p-4 rounded-md">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-medium">Total:</span>
+                <span className="text-xl font-bold text-blue-600">{formatarMoeda(calcularTotal())}</span>
+              </div>
+            </div>
             
-            {configForm.tipoEmissao === 'sat' && (
+            <div className="flex justify-end">
               <button
-                onClick={handleTestarConexaoSAT}
-                className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
-                disabled={!configForm.satCodigoAtivacao}
+                onClick={handleEmitirNota}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                disabled={isLoading || produtosSelecionados.length === 0}
               >
-                Testar Conexão SAT
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <span>Emitindo...</span>
+                  </div>
+                ) : (
+                  `Emitir ${tipoNota === 'nfce' ? 'NFC-e' : 'SAT'}`
+                )}
               </button>
-            )}
-            
-            {configForm.impressoraTermica && (
-              <button
-                onClick={handleTestarImpressora}
-                className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700"
-              >
-                Testar Impressora
-              </button>
-            )}
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Documentos Fiscais */}
-      <div className="p-6 mb-8 bg-white rounded-lg shadow-md">
-        <h2 className="mb-4 text-xl font-semibold">Documentos Fiscais Emitidos</h2>
-        
-        {/* Filtros */}
-        <div className="p-4 mb-6 bg-gray-50 rounded-md">
-          <h3 className="mb-3 text-lg font-medium">Filtros</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label className="block mb-1 text-sm font-medium">Tipo</label>
-              <select
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Todos</option>
-                <option value="nfce">NFC-e</option>
-                <option value="sat">SAT</option>
-                <option value="nenhum">Cupom Não Fiscal</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block mb-1 text-sm font-medium">Status</label>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Todos</option>
-                <option value="emitido">Emitido</option>
-                <option value="cancelado">Cancelado</option>
-                <option value="erro">Erro</option>
-                <option value="contingencia">Contingência</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block mb-1 text-sm font-medium">Data Início</label>
-              <input
-                type="date"
-                value={filtroDataInicio}
-                onChange={(e) => setFiltroDataInicio(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-            
-            <div>
-              <label className="block mb-1 text-sm font-medium">Data Fim</label>
-              <input
-                type="date"
-                value={filtroDataFim}
-                onChange={(e) => setFiltroDataFim(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={limparFiltros}
-              className="px-4 py-2 text-sm text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-            >
-              Limpar Filtros
-            </button>
-          </div>
+      {/* Histórico de Notas Emitidas */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">Histórico de Documentos Fiscais</h2>
         </div>
         
-        {/* Tabela de Documentos */}
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-2 text-left">Número</th>
-                <th className="px-4 py-2 text-left">Tipo</th>
-                <th className="px-4 py-2 text-left">Data/Hora</th>
-                <th className="px-4 py-2 text-left">Valor</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
+        {notasEmitidas.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p>Nenhum documento fiscal emitido.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
-                    Carregando documentos fiscais...
-                  </td>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Documento
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cliente
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Data/Hora
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Valor
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-3 text-center text-red-500">
-                    Erro ao carregar documentos fiscais: {error}
-                  </td>
-                </tr>
-              ) : documentosFiltrados.length > 0 ? (
-                documentosFiltrados.map((documento) => (
-                  <tr key={documento.id} className="border-t border-gray-200">
-                    <td className="px-4 py-3">
-                      {documento.numero}
-                      <span className="ml-1 text-xs text-gray-500">
-                        (Série: {documento.serie})
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {notasEmitidas.map((nota) => (
+                  <tr key={nota.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {nota.tipo === 'nfce' ? 'NFC-e' : 'SAT'} #{nota.id}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Chave: {nota.chave}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {nota.cliente}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {formatarData(nota.data)}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {formatarMoeda(nota.valorTotal)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Emitida
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {documento.tipo === 'nfce' ? 'NFC-e' : 
-                       documento.tipo === 'sat' ? 'SAT' : 
-                       'Cupom Não Fiscal'}
-                    </td>
-                    <td className="px-4 py-3">{formatarData(documento.dataEmissao)}</td>
-                    <td className="px-4 py-3">{formatarValor(documento.valorTotal)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs text-white rounded-full ${
-                        documento.status === 'emitido' ? 'bg-green-500' :
-                        documento.status === 'cancelado' ? 'bg-red-500' :
-                        documento.status === 'erro' ? 'bg-yellow-500' :
-                        'bg-blue-500'
-                      }`}>
-                        {documento.status === 'emitido' ? 'Emitido' :
-                         documento.status === 'cancelado' ? 'Cancelado' :
-                         documento.status === 'erro' ? 'Erro' :
-                         'Contingência'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex space-x-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
                         <button
-                          onClick={() => {
-                            setDocumentoSelecionado(documento);
-                            setMostrarModalDetalhes(true);
-                          }}
-                          className="px-2 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"
+                          className="text-blue-600 hover:text-blue-900"
+                          title="Visualizar DANFE"
                         >
-                          Detalhes
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
                         </button>
                         
                         <button
-                          onClick={() => handleImprimirDANFE(documento.id)}
-                          className="px-2 py-1 text-xs text-white bg-purple-500 rounded hover:bg-purple-600"
-                          disabled={documento.status === 'erro'}
+                          className="text-green-600 hover:text-green-900"
+                          title="Imprimir"
                         >
-                          Imprimir
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
                         </button>
                         
-                        {documento.status === 'emitido' && (
-                          <button
-                            onClick={() => {
-                              setDocumentoSelecionado(documento);
-                              setMostrarModalCancelamento(true);
-                            }}
-                            className="px-2 py-1 text-xs text-white bg-red-500 rounded hover:bg-red-600"
-                          >
-                            Cancelar
-                          </button>
-                        )}
+                        <button
+                          className="text-purple-600 hover:text-purple-900"
+                          title="Enviar por Email"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
-                    Nenhum documento fiscal encontrado
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
       
-      {/* Modal de Upload de Certificado */}
-      {mostrarModalCertificado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-md p-6 mx-4 bg-white rounded-lg shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Instalar Certificado Digital</h2>
-              <button
-                onClick={() => setMostrarModalCertificado(false)}
-                className="p-1 text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+      {/* Modal de Certificado A1 */}
+      {showCertificadoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-4">Carregar Certificado A1</h2>
             
-            <div className="mb-4">
-              <label className="block mb-1 text-sm font-medium">Arquivo do Certificado (.pfx) *</label>
-              <div className="flex items-center">
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="certificadoArquivo" className="block text-sm font-medium text-gray-700 mb-1">
+                  Arquivo do Certificado (.pfx)
+                </label>
+                <div className="flex items-center">
+                  <label className="w-full flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm leading-4 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    <span>Selecionar arquivo</span>
+                    <input type="file" className="sr-only" />
+                  </label>
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="certificadoSenha" className="block text-sm font-medium text-gray-700 mb-1">
+                  Senha do Certificado
+                </label>
                 <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".pfx"
-                  className="hidden"
+                  type="password"
+                  id="certificadoSenha"
+                  value={certificadoSenha}
+                  onChange={(e) => setCertificadoSenha(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <button
-                  onClick={handleAbrirSelecionarArquivo}
-                  className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                >
-                  Selecionar Arquivo
-                </button>
-                <span className="ml-2 text-sm text-gray-600">
-                  {certificadoFile ? certificadoFile.name : 'Nenhum arquivo selecionado'}
-                </span>
               </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block mb-1 text-sm font-medium">Senha do Certificado *</label>
-              <input
-                type="password"
-                value={certificadoSenha}
-                onChange={(e) => setCertificadoSenha(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                placeholder="Senha do certificado digital"
-              />
-            </div>
-            
-            <div className="flex justify-end space-x-2">
+            <div className="mt-6 flex justify-end space-x-2">
               <button
-                onClick={() => setMostrarModalCertificado(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                onClick={() => setShowCertificadoModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
               >
                 Cancelar
               </button>
+              
               <button
                 onClick={handleUploadCertificado}
-                className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                disabled={!certificadoFile || !certificadoSenha}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                disabled={!certificadoSenha}
               >
-                Instalar Certificado
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Modal de Cancelamento */}
-      {mostrarModalCancelamento && documentoSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-md p-6 mx-4 bg-white rounded-lg shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Cancelar Documento Fiscal</h2>
-              <button
-                onClick={() => setMostrarModalCancelamento(false)}
-                className="p-1 text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-3 mb-4 bg-gray-100 rounded-md">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Documento:</span> {documentoSelecionado.numero} (Série: {documentoSelecionado.serie})
-              </p>
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Tipo:</span> {documentoSelecionado.tipo === 'nfce' ? 'NFC-e' : documentoSelecionado.tipo === 'sat' ? 'SAT' : 'Cupom Não Fiscal'}
-              </p>
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Emissão:</span> {formatarData(documentoSelecionado.dataEmissao)}
-              </p>
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Valor:</span> {formatarValor(documentoSelecionado.valorTotal)}
-              </p>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block mb-1 text-sm font-medium">Justificativa do Cancelamento *</label>
-              <textarea
-                value={justificativaCancelamento}
-                onChange={(e) => setJustificativaCancelamento(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                rows={4}
-                placeholder="Informe o motivo do cancelamento (mínimo 15 caracteres)"
-                minLength={15}
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                {justificativaCancelamento.length}/150 caracteres (mínimo 15)
-              </p>
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setMostrarModalCancelamento(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCancelarDocumento}
-                className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700"
-                disabled={justificativaCancelamento.length < 15}
-              >
-                Confirmar Cancelamento
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Modal de Detalhes */}
-      {mostrarModalDetalhes && documentoSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-2xl p-6 mx-4 bg-white rounded-lg shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Detalhes do Documento Fiscal</h2>
-              <button
-                onClick={() => setMostrarModalDetalhes(false)}
-                className="p-1 text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">
-              <div className="p-3 bg-gray-100 rounded-md">
-                <h3 className="mb-2 text-lg font-medium">Informações Gerais</h3>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Número:</span> {documentoSelecionado.numero}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Série:</span> {documentoSelecionado.serie}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Tipo:</span> {documentoSelecionado.tipo === 'nfce' ? 'NFC-e' : documentoSelecionado.tipo === 'sat' ? 'SAT' : 'Cupom Não Fiscal'}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Status:</span> {documentoSelecionado.status === 'emitido' ? 'Emitido' : documentoSelecionado.status === 'cancelado' ? 'Cancelado' : documentoSelecionado.status === 'erro' ? 'Erro' : 'Contingência'}
-                </p>
-              </div>
-              
-              <div className="p-3 bg-gray-100 rounded-md">
-                <h3 className="mb-2 text-lg font-medium">Datas</h3>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Emissão:</span> {formatarData(documentoSelecionado.dataEmissao)}
-                </p>
-                {documentoSelecionado.dataCancelamento && (
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Cancelamento:</span> {formatarData(documentoSelecionado.dataCancelamento)}
-                  </p>
-                )}
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Valor Total:</span> {formatarValor(documentoSelecionado.valorTotal)}
-                </p>
-              </div>
-            </div>
-            
-            {documentoSelecionado.chave && (
-              <div className="p-3 mb-4 bg-gray-100 rounded-md">
-                <h3 className="mb-2 text-lg font-medium">Chave de Acesso</h3>
-                <p className="text-sm font-mono break-all">{documentoSelecionado.chave}</p>
-              </div>
-            )}
-            
-            {documentoSelecionado.mensagemSefaz && (
-              <div className="p-3 mb-4 bg-gray-100 rounded-md">
-                <h3 className="mb-2 text-lg font-medium">Mensagem SEFAZ</h3>
-                <p className="text-sm text-gray-600">{documentoSelecionado.mensagemSefaz}</p>
-              </div>
-            )}
-            
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => handleImprimirDANFE(documentoSelecionado.id)}
-                className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700"
-                disabled={documentoSelecionado.status === 'erro'}
-              >
-                Imprimir DANFE
-              </button>
-              
-              <button
-                onClick={() => setMostrarModalDetalhes(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-              >
-                Fechar
+                Carregar Certificado
               </button>
             </div>
           </div>

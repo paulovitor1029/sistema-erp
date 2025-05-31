@@ -1,96 +1,229 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePromocoes, Promocao } from '../hooks/usePromocoes';
+import { usePromocoes } from '../hooks/usePromocoes';
 import { useProdutos } from '../../produtos/hooks/useProdutos';
 import { useAuth } from '../../auth/context/AuthContext';
 
 const PromocoesPage = () => {
   const navigate = useNavigate();
-  const { promocoes, isLoading, error, alterarStatusPromocao, excluirPromocao, recarregarPromocoes } = usePromocoes();
-  const { produtos } = useProdutos();
   const { hasPermission } = useAuth();
+  const { promocoes, adicionarPromocao, atualizarPromocao, excluirPromocao } = usePromocoes();
+  const { produtos } = useProdutos();
   
-  const [filtro, setFiltro] = useState('');
-  const [statusFiltro, setStatusFiltro] = useState('todos');
-  const [tipoFiltro, setTipoFiltro] = useState('todos');
-  const [promocoesFiltradas, setPromocoesFiltradas] = useState<Promocao[]>([]);
+  // Estados para formulário de promoção
+  const [showForm, setShowForm] = useState(false);
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [promocaoId, setPromocaoId] = useState<number | null>(null);
+  const [nome, setNome] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [tipoDesconto, setTipoDesconto] = useState<'percentual' | 'valor'>('percentual');
+  const [valorDesconto, setValorDesconto] = useState('');
+  const [produtosSelecionados, setProdutosSelecionados] = useState<number[]>([]);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
+  const [ativa, setAtiva] = useState(true);
+  
+  // Estados para filtros
+  const [filtroStatus, setFiltroStatus] = useState('todas');
+  const [filtroProduto, setFiltroProduto] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [promocoesFiltradas, setPromocoesFiltradas] = useState(promocoes);
+  
+  // Estados de UI
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  
+  // Extrair categorias únicas dos produtos
+  const categorias = [...new Set(produtos.map(p => p.categoria))];
   
   // Aplicar filtros
   useEffect(() => {
     let resultado = [...promocoes];
     
-    // Filtro por nome ou descrição
-    if (filtro) {
-      const termoLowerCase = filtro.toLowerCase();
+    // Filtro por status
+    if (filtroStatus === 'ativas') {
+      const hoje = new Date().toISOString().split('T')[0];
+      resultado = resultado.filter(p => p.ativa && p.dataFim >= hoje);
+    } else if (filtroStatus === 'inativas') {
+      const hoje = new Date().toISOString().split('T')[0];
+      resultado = resultado.filter(p => !p.ativa || p.dataFim < hoje);
+    } else if (filtroStatus === 'expiradas') {
+      const hoje = new Date().toISOString().split('T')[0];
+      resultado = resultado.filter(p => p.dataFim < hoje);
+    }
+    
+    // Filtro por produto
+    if (filtroProduto) {
       resultado = resultado.filter(p => 
-        p.nome.toLowerCase().includes(termoLowerCase) || 
-        (p.descricao && p.descricao.toLowerCase().includes(termoLowerCase)) ||
-        (p.produtoId && produtos.find(prod => prod.id === p.produtoId)?.nome.toLowerCase().includes(termoLowerCase))
+        p.produtosIds.includes(parseInt(filtroProduto))
       );
     }
     
-    // Filtro por status
-    if (statusFiltro !== 'todos') {
-      const hoje = new Date();
+    // Filtro por categoria
+    if (filtroCategoria) {
+      const produtosDaCategoria = produtos
+        .filter(p => p.categoria === filtroCategoria)
+        .map(p => p.id);
       
-      if (statusFiltro === 'ativas') {
-        resultado = resultado.filter(p => 
-          p.ativo && 
-          new Date(p.dataInicio) <= hoje && 
-          new Date(p.dataFim) >= hoje
-        );
-      } else if (statusFiltro === 'inativas') {
-        resultado = resultado.filter(p => !p.ativo);
-      } else if (statusFiltro === 'agendadas') {
-        resultado = resultado.filter(p => 
-          p.ativo && 
-          new Date(p.dataInicio) > hoje
-        );
-      } else if (statusFiltro === 'expiradas') {
-        resultado = resultado.filter(p => 
-          new Date(p.dataFim) < hoje
-        );
-      }
+      resultado = resultado.filter(p => 
+        p.produtosIds.some(id => produtosDaCategoria.includes(id))
+      );
     }
     
-    // Filtro por tipo
-    if (tipoFiltro !== 'todos') {
-      if (tipoFiltro === 'produto') {
-        resultado = resultado.filter(p => p.produtoId !== undefined);
-      } else if (tipoFiltro === 'categoria') {
-        resultado = resultado.filter(p => p.categoriaId !== undefined);
-      }
-    }
-    
-    // Ordenar por data de início (mais recente primeiro)
-    resultado.sort((a, b) => new Date(b.dataInicio).getTime() - new Date(a.dataInicio).getTime());
+    // Ordenar por data de fim (mais próximas primeiro)
+    resultado.sort((a, b) => {
+      const dataA = new Date(a.dataFim).getTime();
+      const dataB = new Date(b.dataFim).getTime();
+      return dataA - dataB;
+    });
     
     setPromocoesFiltradas(resultado);
-  }, [promocoes, produtos, filtro, statusFiltro, tipoFiltro]);
+  }, [promocoes, filtroStatus, filtroProduto, filtroCategoria, produtos]);
   
-  const handleAlterarStatus = async (id: number, novoStatus: boolean) => {
-    if (!hasPermission('operador')) {
-      alert('Você não tem permissão para alterar o status de promoções.');
-      return;
-    }
-    
-    const resultado = await alterarStatusPromocao(id, novoStatus);
-    if (resultado) {
-      recarregarPromocoes();
-    }
+  const limparFormulario = () => {
+    setNome('');
+    setDescricao('');
+    setDataInicio('');
+    setDataFim('');
+    setTipoDesconto('percentual');
+    setValorDesconto('');
+    setProdutosSelecionados([]);
+    setCategoriaSelecionada('');
+    setAtiva(true);
+    setPromocaoId(null);
+    setModoEdicao(false);
+  };
+  
+  const handleNovaPromocao = () => {
+    limparFormulario();
+    setShowForm(true);
+  };
+  
+  const handleEditarPromocao = (promocao: any) => {
+    setNome(promocao.nome);
+    setDescricao(promocao.descricao);
+    setDataInicio(promocao.dataInicio);
+    setDataFim(promocao.dataFim);
+    setTipoDesconto(promocao.tipoDesconto);
+    setValorDesconto(promocao.valorDesconto.toString());
+    setProdutosSelecionados(promocao.produtosIds);
+    setCategoriaSelecionada(promocao.categoria || '');
+    setAtiva(promocao.ativa);
+    setPromocaoId(promocao.id);
+    setModoEdicao(true);
+    setShowForm(true);
   };
   
   const handleExcluirPromocao = async (id: number) => {
-    if (!hasPermission('gerente')) {
-      alert('Você não tem permissão para excluir promoções.');
+    if (window.confirm('Tem certeza que deseja excluir esta promoção? Esta ação não pode ser desfeita.')) {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const resultado = await excluirPromocao(id);
+        
+        if (resultado) {
+          setSuccess('Promoção excluída com sucesso!');
+          
+          // Limpar mensagem de sucesso após 3 segundos
+          setTimeout(() => {
+            setSuccess(null);
+          }, 3000);
+        } else {
+          setError('Erro ao excluir promoção');
+        }
+      } catch (err) {
+        setError('Erro ao processar a solicitação');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+  
+  const handleSelecionarCategoria = (categoria: string) => {
+    setCategoriaSelecionada(categoria);
+    
+    // Selecionar todos os produtos da categoria
+    const produtosDaCategoria = produtos
+      .filter(p => p.categoria === categoria)
+      .map(p => p.id);
+    
+    setProdutosSelecionados(produtosDaCategoria);
+  };
+  
+  const handleToggleProduto = (produtoId: number) => {
+    if (produtosSelecionados.includes(produtoId)) {
+      setProdutosSelecionados(produtosSelecionados.filter(id => id !== produtoId));
+    } else {
+      setProdutosSelecionados([...produtosSelecionados, produtoId]);
+    }
+  };
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!nome || !dataInicio || !dataFim || !valorDesconto || produtosSelecionados.length === 0) {
+      setError('Preencha todos os campos obrigatórios e selecione pelo menos um produto');
       return;
     }
     
-    if (window.confirm('Tem certeza que deseja excluir esta promoção?')) {
-      const resultado = await excluirPromocao(id);
-      if (resultado) {
-        recarregarPromocoes();
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const valorDescontoNumerico = parseFloat(valorDesconto);
+      
+      if (isNaN(valorDescontoNumerico) || valorDescontoNumerico <= 0) {
+        setError('Valor de desconto inválido');
+        setIsLoading(false);
+        return;
       }
+      
+      // Validar percentual máximo
+      if (tipoDesconto === 'percentual' && valorDescontoNumerico > 100) {
+        setError('Percentual de desconto não pode ser maior que 100%');
+        setIsLoading(false);
+        return;
+      }
+      
+      const promocaoData = {
+        nome,
+        descricao,
+        dataInicio,
+        dataFim,
+        tipoDesconto,
+        valorDesconto: valorDescontoNumerico,
+        produtosIds: produtosSelecionados,
+        categoria: categoriaSelecionada,
+        ativa
+      };
+      
+      let resultado;
+      
+      if (modoEdicao && promocaoId !== null) {
+        resultado = await atualizarPromocao(promocaoId, promocaoData);
+      } else {
+        resultado = await adicionarPromocao(promocaoData);
+      }
+      
+      if (resultado) {
+        setSuccess(`Promoção ${modoEdicao ? 'atualizada' : 'cadastrada'} com sucesso!`);
+        setShowForm(false);
+        limparFormulario();
+        
+        // Limpar mensagem de sucesso após 3 segundos
+        setTimeout(() => {
+          setSuccess(null);
+        }, 3000);
+      } else {
+        setError(`Erro ao ${modoEdicao ? 'atualizar' : 'cadastrar'} promoção`);
+      }
+    } catch (err) {
+      setError('Erro ao processar a solicitação');
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -106,30 +239,19 @@ const PromocoesPage = () => {
     return data.toLocaleDateString('pt-BR');
   };
   
-  const getStatusPromocao = (promocao: Promocao) => {
+  const verificarStatus = (promocao: any) => {
     const hoje = new Date();
     const dataInicio = new Date(promocao.dataInicio);
     const dataFim = new Date(promocao.dataFim);
     
-    if (!promocao.ativo) {
-      return { texto: 'Inativa', classe: 'bg-gray-100 text-gray-800' };
-    } else if (dataInicio > hoje) {
-      return { texto: 'Agendada', classe: 'bg-blue-100 text-blue-800' };
-    } else if (dataFim < hoje) {
-      return { texto: 'Expirada', classe: 'bg-yellow-100 text-yellow-800' };
+    if (!promocao.ativa) {
+      return { status: 'inativa', texto: 'Inativa', classe: 'bg-gray-100 text-gray-800' };
+    } else if (hoje < dataInicio) {
+      return { status: 'futura', texto: 'Agendada', classe: 'bg-blue-100 text-blue-800' };
+    } else if (hoje > dataFim) {
+      return { status: 'expirada', texto: 'Expirada', classe: 'bg-red-100 text-red-800' };
     } else {
-      return { texto: 'Ativa', classe: 'bg-green-100 text-green-800' };
-    }
-  };
-  
-  const getNomeProdutoOuCategoria = (promocao: Promocao) => {
-    if (promocao.produtoId) {
-      const produto = produtos.find(p => p.id === promocao.produtoId);
-      return produto ? produto.nome : 'Produto não encontrado';
-    } else if (promocao.categoriaId) {
-      return `Categoria: ${promocao.categoriaId}`;
-    } else {
-      return 'Todos os produtos';
+      return { status: 'ativa', texto: 'Ativa', classe: 'bg-green-100 text-green-800' };
     }
   };
   
@@ -140,7 +262,7 @@ const PromocoesPage = () => {
         
         <div className="flex flex-col sm:flex-row gap-2">
           <button
-            onClick={() => navigate('/promocoes/nova')}
+            onClick={handleNovaPromocao}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             disabled={!hasPermission('operador')}
           >
@@ -149,95 +271,298 @@ const PromocoesPage = () => {
         </div>
       </div>
       
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {success && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+          <p>{success}</p>
+        </div>
+      )}
+      
+      {/* Formulário de Promoção */}
+      {showForm && (
+        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+          <h2 className="text-lg font-semibold mb-4">
+            {modoEdicao ? 'Editar Promoção' : 'Nova Promoção'}
+          </h2>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-1">
+                    Nome da Promoção *
+                  </label>
+                  <input
+                    type="text"
+                    id="nome"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
+                    Descrição
+                  </label>
+                  <textarea
+                    id="descricao"
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="dataInicio" className="block text-sm font-medium text-gray-700 mb-1">
+                      Data de Início *
+                    </label>
+                    <input
+                      type="date"
+                      id="dataInicio"
+                      value={dataInicio}
+                      onChange={(e) => setDataInicio(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="dataFim" className="block text-sm font-medium text-gray-700 mb-1">
+                      Data de Término *
+                    </label>
+                    <input
+                      type="date"
+                      id="dataFim"
+                      value={dataFim}
+                      onChange={(e) => setDataFim(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="tipoDesconto" className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Desconto *
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="radio"
+                        value="percentual"
+                        checked={tipoDesconto === 'percentual'}
+                        onChange={() => setTipoDesconto('percentual')}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Percentual (%)</span>
+                    </label>
+                    
+                    <label className="inline-flex items-center">
+                      <input
+                        type="radio"
+                        value="valor"
+                        checked={tipoDesconto === 'valor'}
+                        onChange={() => setTipoDesconto('valor')}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Valor Fixo (R$)</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="valorDesconto" className="block text-sm font-medium text-gray-700 mb-1">
+                    {tipoDesconto === 'percentual' ? 'Percentual de Desconto (%)' : 'Valor do Desconto (R$)'} *
+                  </label>
+                  <input
+                    type="number"
+                    id="valorDesconto"
+                    value={valorDesconto}
+                    onChange={(e) => setValorDesconto(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    max={tipoDesconto === 'percentual' ? "100" : undefined}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="ativa"
+                    checked={ativa}
+                    onChange={(e) => setAtiva(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="ativa" className="ml-2 block text-sm text-gray-900">
+                    Promoção Ativa
+                  </label>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="categoria" className="block text-sm font-medium text-gray-700 mb-1">
+                    Aplicar a uma Categoria
+                  </label>
+                  <select
+                    id="categoria"
+                    value={categoriaSelecionada}
+                    onChange={(e) => handleSelecionarCategoria(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione uma categoria</option>
+                    {categorias.map((categoria, index) => (
+                      <option key={index} value={categoria}>
+                        {categoria}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Produtos Incluídos na Promoção *
+                  </label>
+                  <div className="border border-gray-300 rounded-md h-64 overflow-y-auto p-2">
+                    {produtos.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">Nenhum produto cadastrado</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {produtos.map((produto) => (
+                          <div key={produto.id} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id={`produto-${produto.id}`}
+                              checked={produtosSelecionados.includes(produto.id)}
+                              onChange={() => handleToggleProduto(produto.id)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor={`produto-${produto.id}`} className="ml-2 block text-sm text-gray-900">
+                              {produto.nome} - {formatarMoeda(produto.precoVenda)}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Produtos selecionados: {produtosSelecionados.length}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <span>Salvando...</span>
+                  </div>
+                ) : (
+                  'Salvar Promoção'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+        <h2 className="text-lg font-semibold mb-4">Filtros</h2>
+        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label htmlFor="filtro" className="block text-sm font-medium text-gray-700 mb-1">
-              Buscar por nome ou produto
-            </label>
-            <input
-              type="text"
-              id="filtro"
-              value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
-              placeholder="Digite para buscar..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="filtroStatus" className="block text-sm font-medium text-gray-700 mb-1">
               Status
             </label>
             <select
-              id="status"
-              value={statusFiltro}
-              onChange={(e) => setStatusFiltro(e.target.value)}
+              id="filtroStatus"
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="todos">Todos os status</option>
+              <option value="todas">Todas</option>
               <option value="ativas">Ativas</option>
-              <option value="agendadas">Agendadas</option>
-              <option value="expiradas">Expiradas</option>
               <option value="inativas">Inativas</option>
+              <option value="expiradas">Expiradas</option>
             </select>
           </div>
           
           <div>
-            <label htmlFor="tipo" className="block text-sm font-medium text-gray-700 mb-1">
-              Tipo
+            <label htmlFor="filtroProduto" className="block text-sm font-medium text-gray-700 mb-1">
+              Produto
             </label>
             <select
-              id="tipo"
-              value={tipoFiltro}
-              onChange={(e) => setTipoFiltro(e.target.value)}
+              id="filtroProduto"
+              value={filtroProduto}
+              onChange={(e) => setFiltroProduto(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="todos">Todos os tipos</option>
-              <option value="produto">Por produto</option>
-              <option value="categoria">Por categoria</option>
+              <option value="">Todos os produtos</option>
+              {produtos.map((produto) => (
+                <option key={produto.id} value={produto.id}>
+                  {produto.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label htmlFor="filtroCategoria" className="block text-sm font-medium text-gray-700 mb-1">
+              Categoria
+            </label>
+            <select
+              id="filtroCategoria"
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas as categorias</option>
+              {categorias.map((categoria, index) => (
+                <option key={index} value={categoria}>
+                  {categoria}
+                </option>
+              ))}
             </select>
           </div>
         </div>
-        
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={() => {
-              setFiltro('');
-              setStatusFiltro('todos');
-              setTipoFiltro('todos');
-            }}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-          >
-            Limpar Filtros
-          </button>
-        </div>
       </div>
       
-      {/* Tabela de Promoções */}
+      {/* Lista de Promoções */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-            <p>Carregando promoções...</p>
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center text-red-600">
-            <p>Erro ao carregar promoções: {error}</p>
-            <button
-              onClick={recarregarPromocoes}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Tentar Novamente
-            </button>
-          </div>
-        ) : promocoesFiltradas.length === 0 ? (
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">Promoções</h2>
+        </div>
+        
+        {promocoesFiltradas.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <p>Nenhuma promoção encontrada.</p>
-            {(filtro || statusFiltro !== 'todos' || tipoFiltro !== 'todos') && (
-              <p className="mt-2">Tente ajustar os filtros ou adicione uma nova promoção.</p>
-            )}
+            <p className="mt-2">Crie uma nova promoção ou ajuste os filtros.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -245,16 +570,13 @@ const PromocoesPage = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aplicação
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Desconto
+                    Promoção
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Período
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Desconto
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -266,27 +588,26 @@ const PromocoesPage = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {promocoesFiltradas.map((promocao) => {
-                  const statusInfo = getStatusPromocao(promocao);
+                  const statusInfo = verificarStatus(promocao);
                   
                   return (
                     <tr key={promocao.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{promocao.nome}</div>
-                        {promocao.descricao && (
-                          <div className="text-sm text-gray-500">{promocao.descricao}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {getNomeProdutoOuCategoria(promocao)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {promocao.tipoDesconto === 'percentual' 
-                          ? `${promocao.valorDesconto}%` 
-                          : formatarMoeda(promocao.valorDesconto)}
+                        <div className="text-sm text-gray-500">
+                          {promocao.produtosIds.length} produtos incluídos
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div>De: {formatarData(promocao.dataInicio)}</div>
                         <div>Até: {formatarData(promocao.dataFim)}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {promocao.tipoDesconto === 'percentual' ? (
+                          <span>{promocao.valorDesconto}%</span>
+                        ) : (
+                          <span>{formatarMoeda(promocao.valorDesconto)}</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.classe}`}>
@@ -296,18 +617,7 @@ const PromocoesPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
                           <button
-                            onClick={() => navigate(`/promocoes/${promocao.id}`)}
-                            className="text-blue-600 hover:text-blue-900"
-                            title="Visualizar"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                          
-                          <button
-                            onClick={() => navigate(`/promocoes/editar/${promocao.id}`)}
+                            onClick={() => handleEditarPromocao(promocao)}
                             className="text-yellow-600 hover:text-yellow-900"
                             title="Editar"
                             disabled={!hasPermission('operador')}
@@ -318,27 +628,10 @@ const PromocoesPage = () => {
                           </button>
                           
                           <button
-                            onClick={() => handleAlterarStatus(promocao.id, !promocao.ativo)}
-                            className={`${promocao.ativo ? 'text-gray-600 hover:text-gray-900' : 'text-green-600 hover:text-green-900'}`}
-                            title={promocao.ativo ? 'Desativar' : 'Ativar'}
-                            disabled={!hasPermission('operador')}
-                          >
-                            {promocao.ativo ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            )}
-                          </button>
-                          
-                          <button
                             onClick={() => handleExcluirPromocao(promocao.id)}
                             className="text-red-600 hover:text-red-900"
                             title="Excluir"
-                            disabled={!hasPermission('gerente')}
+                            disabled={!hasPermission('operador')}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

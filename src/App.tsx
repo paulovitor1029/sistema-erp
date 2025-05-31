@@ -2,141 +2,139 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect } from 'react';
 import { AuthProvider } from './modules/auth/context/AuthContext';
 import LoginPage from './modules/auth/components/LoginPage';
-import Sidebar from './modules/layout/components/Sidebar';
-
-// Importação dos componentes de página
+import DashboardPage from './modules/dashboard/components/DashboardPage';
+import ProdutosPage from './modules/produtos/components/ProdutosPage';
+import ProdutoForm from './modules/produtos/components/ProdutoForm';
+import CategoriaForm from './modules/produtos/components/CategoriaForm';
 import EstoquePage from './modules/estoque/components/EstoquePage';
 import EstoqueEntradaForm from './modules/estoque/components/EstoqueEntradaForm';
 import EstoqueSaidaForm from './modules/estoque/components/EstoqueSaidaForm';
 import EstoqueAjusteForm from './modules/estoque/components/EstoqueAjusteForm';
-
-import ProdutosPage from './modules/produtos/components/ProdutosPage';
-import ProdutoForm from './modules/produtos/components/ProdutoForm';
-import ProdutoDetalhes from './modules/produtos/components/ProdutoDetalhes';
-import CategoriaForm from './modules/produtos/components/CategoriaForm';
-
-import PromocoesPage from './modules/promocoes/components/PromocoesPage';
-import PDVPage from './modules/pdv/components/PDVPage';
-
-import FuncionariosPage from './modules/usuarios/components/FuncionariosPage';
-import PontoPage from './modules/ponto/components/PontoPage';
-
 import ClientesPage from './modules/clientes/components/ClientesPage';
 import ClienteForm from './modules/clientes/components/ClienteForm';
-
+import FuncionariosPage from './modules/usuarios/components/FuncionariosPage';
+import FuncionarioForm from './modules/usuarios/components/FuncionarioForm';
+import PontoPage from './modules/ponto/components/PontoPage';
 import CaixaPage from './modules/caixa/components/CaixaPage';
+import PromocoesPage from './modules/promocoes/components/PromocoesPage';
+import FiscalPage from './modules/fiscal/components/FiscalPage';
 import RelatoriosPage from './modules/relatorios/components/RelatoriosPage';
 import ConfiguracoesPage from './modules/configuracoes/components/ConfiguracoesPage';
+import PDVPage from './modules/pdv/components/PDVPage';
+import { SidebarProvider } from './modules/layout/hooks/useSidebar';
+import Sidebar from './modules/layout/components/Sidebar';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  // Verificar tamanho da tela para responsividade
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-      if (window.innerWidth < 768) {
-        setIsSidebarOpen(false);
-      } else {
-        setIsSidebarOpen(true);
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-
-  // Função para alternar a visibilidade da sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
+  
+  // Fechar sidebar em dispositivos móveis quando a rota muda
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
-
-  // Componente de layout principal que inclui a sidebar
+  
+  // Componente de layout que inclui a sidebar
   const Layout = ({ children }: { children: React.ReactNode }) => {
-    if (!isAuthenticated) {
-      return <Navigate to="/login" />;
-    }
-
     return (
       <div className="flex h-screen bg-gray-100">
-        <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
-        <div className={`flex-1 overflow-auto transition-all duration-300 ${isSidebarOpen && !isMobile ? 'ml-64' : 'ml-0'}`}>
-          <div className="sticky top-0 z-10 bg-white shadow-md p-4 flex items-center">
-            <button
-              onClick={toggleSidebar}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h1 className="ml-4 text-xl font-semibold text-gray-800">Sistema ERP</h1>
+        <SidebarProvider>
+          <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
+          
+          <div className="flex-1 overflow-auto">
+            <div className="sticky top-0 z-10 bg-white shadow-sm">
+              <div className="flex items-center justify-between p-4">
+                <button
+                  onClick={toggleSidebar}
+                  className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                
+                <div className="text-lg font-semibold">Sistema ERP</div>
+                
+                <div className="w-6"></div> {/* Espaço para manter o título centralizado */}
+              </div>
+            </div>
+            
+            <main className="pb-8">
+              {children}
+            </main>
           </div>
-          <main className="p-4">
-            {children}
-          </main>
-        </div>
+        </SidebarProvider>
       </div>
     );
   };
-
+  
+  // Componente de rota protegida que verifica autenticação
+  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    const isAuthenticated = localStorage.getItem('user') !== null;
+    
+    if (!isAuthenticated) {
+      return <Navigate to="/login" replace />;
+    }
+    
+    return <Layout>{children}</Layout>;
+  };
+  
   return (
-    <AuthProvider>
-      <Router>
+    <Router>
+      <AuthProvider>
         <Routes>
-          <Route path="/login" element={<LoginPage onLogin={() => setIsAuthenticated(true)} />} />
+          <Route path="/login" element={<LoginPage />} />
           
-          <Route path="/" element={<Layout><EstoquePage /></Layout>} />
-          
-          {/* Rotas de Estoque */}
-          <Route path="/estoque" element={<Layout><EstoquePage /></Layout>} />
-          <Route path="/estoque/entrada" element={<Layout><EstoqueEntradaForm /></Layout>} />
-          <Route path="/estoque/saida" element={<Layout><EstoqueSaidaForm /></Layout>} />
-          <Route path="/estoque/ajuste" element={<Layout><EstoqueAjusteForm /></Layout>} />
+          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           
           {/* Rotas de Produtos */}
-          <Route path="/produtos" element={<Layout><ProdutosPage /></Layout>} />
-          <Route path="/produtos/novo" element={<Layout><ProdutoForm /></Layout>} />
-          <Route path="/produtos/:id" element={<Layout><ProdutoDetalhes /></Layout>} />
-          <Route path="/produtos/editar/:id" element={<Layout><ProdutoForm /></Layout>} />
-          <Route path="/produtos/categorias" element={<Layout><CategoriaForm /></Layout>} />
+          <Route path="/produtos" element={<ProtectedRoute><ProdutosPage /></ProtectedRoute>} />
+          <Route path="/produtos/novo" element={<ProtectedRoute><ProdutoForm /></ProtectedRoute>} />
+          <Route path="/produtos/editar/:id" element={<ProtectedRoute><ProdutoForm modo="edicao" /></ProtectedRoute>} />
+          <Route path="/produtos/categorias" element={<ProtectedRoute><CategoriaForm /></ProtectedRoute>} />
           
-          {/* Rotas de Promoções */}
-          <Route path="/promocoes" element={<Layout><PromocoesPage /></Layout>} />
-          
-          {/* Rotas de PDV */}
-          <Route path="/pdv" element={<Layout><PDVPage /></Layout>} />
-          
-          {/* Rotas de Funcionários e Ponto */}
-          <Route path="/funcionarios" element={<Layout><FuncionariosPage /></Layout>} />
-          <Route path="/ponto" element={<Layout><PontoPage /></Layout>} />
+          {/* Rotas de Estoque */}
+          <Route path="/estoque" element={<ProtectedRoute><EstoquePage /></ProtectedRoute>} />
+          <Route path="/estoque/entrada" element={<ProtectedRoute><EstoqueEntradaForm /></ProtectedRoute>} />
+          <Route path="/estoque/saida" element={<ProtectedRoute><EstoqueSaidaForm /></ProtectedRoute>} />
+          <Route path="/estoque/ajuste" element={<ProtectedRoute><EstoqueAjusteForm /></ProtectedRoute>} />
           
           {/* Rotas de Clientes */}
-          <Route path="/clientes" element={<Layout><ClientesPage /></Layout>} />
-          <Route path="/clientes/novo" element={<Layout><ClienteForm /></Layout>} />
-          <Route path="/clientes/:id" element={<Layout><ClientesPage /></Layout>} />
-          <Route path="/clientes/editar/:id" element={<Layout><ClienteForm /></Layout>} />
+          <Route path="/clientes" element={<ProtectedRoute><ClientesPage /></ProtectedRoute>} />
+          <Route path="/clientes/novo" element={<ProtectedRoute><ClienteForm /></ProtectedRoute>} />
+          <Route path="/clientes/editar/:id" element={<ProtectedRoute><ClienteForm modo="edicao" /></ProtectedRoute>} />
+          
+          {/* Rotas de Funcionários */}
+          <Route path="/funcionarios" element={<ProtectedRoute><FuncionariosPage /></ProtectedRoute>} />
+          <Route path="/funcionarios/novo" element={<ProtectedRoute><FuncionarioForm /></ProtectedRoute>} />
+          <Route path="/funcionarios/editar/:id" element={<ProtectedRoute><FuncionarioForm modo="edicao" /></ProtectedRoute>} />
+          
+          {/* Rotas de Ponto */}
+          <Route path="/ponto" element={<ProtectedRoute><PontoPage /></ProtectedRoute>} />
           
           {/* Rotas de Caixa */}
-          <Route path="/caixa" element={<Layout><CaixaPage /></Layout>} />
+          <Route path="/caixa" element={<ProtectedRoute><CaixaPage /></ProtectedRoute>} />
+          
+          {/* Rotas de PDV */}
+          <Route path="/pdv" element={<ProtectedRoute><PDVPage /></ProtectedRoute>} />
+          
+          {/* Rotas de Promoções */}
+          <Route path="/promocoes" element={<ProtectedRoute><PromocoesPage /></ProtectedRoute>} />
+          
+          {/* Rotas de Emissão Fiscal */}
+          <Route path="/fiscal" element={<ProtectedRoute><FiscalPage /></ProtectedRoute>} />
           
           {/* Rotas de Relatórios */}
-          <Route path="/relatorios" element={<Layout><RelatoriosPage /></Layout>} />
-          <Route path="/relatorios/:tipo" element={<Layout><RelatoriosPage /></Layout>} />
+          <Route path="/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
+          <Route path="/relatorios/:tipo" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
           
           {/* Rotas de Configurações */}
-          <Route path="/configuracoes" element={<Layout><ConfiguracoesPage /></Layout>} />
+          <Route path="/configuracoes" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
+          <Route path="/configuracoes/:secao" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
           
-          <Route path="*" element={<Navigate to="/" />} />
+          {/* Rota de fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 
