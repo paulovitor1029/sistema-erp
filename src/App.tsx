@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './modules/auth/context/AuthContext';
 import LoginPage from './modules/auth/components/LoginPage';
 import DashboardPage from './modules/dashboard/components/DashboardPage';
@@ -25,39 +24,31 @@ import { SidebarProvider } from './modules/layout/hooks/useSidebar';
 import Sidebar from './modules/layout/components/Sidebar';
 
 function App() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
-  
-  // Fechar sidebar em dispositivos móveis quando a rota muda
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-  
   // Componente de layout que inclui a sidebar
   const Layout = ({ children }: { children: React.ReactNode }) => {
+    const { isOpen, isCollapsed } = useAuth();
+    
     return (
       <div className="flex h-screen bg-gray-100">
         <SidebarProvider>
-          <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
+          <Sidebar />
           
-          <div className="flex-1 overflow-auto">
+          <div 
+            className={`flex-1 overflow-auto transition-all duration-300 ${
+              isOpen 
+                ? isCollapsed 
+                  ? 'ml-16' 
+                  : 'ml-0 md:ml-64' 
+                : 'ml-0'
+            }`}
+          >
             <div className="sticky top-0 z-10 bg-white shadow-sm">
               <div className="flex items-center justify-between p-4">
-                <button
-                  onClick={toggleSidebar}
-                  className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                </button>
-                
                 <div className="text-lg font-semibold">Sistema ERP</div>
-                
-                <div className="w-6"></div> {/* Espaço para manter o título centralizado */}
               </div>
             </div>
             
-            <main className="pb-8">
+            <main className="p-6">
               {children}
             </main>
           </div>

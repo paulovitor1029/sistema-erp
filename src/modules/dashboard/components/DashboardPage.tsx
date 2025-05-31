@@ -1,28 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProdutos } from '../modules/produtos/hooks/useProdutos';
-import { useEstoque } from '../modules/estoque/hooks/useEstoque';
-import { useCaixa } from '../modules/caixa/hooks/useCaixa';
-import { useFuncionarios } from '../modules/usuarios/hooks/useFuncionarios';
-import { useAuth } from '../modules/auth/context/AuthContext';
+import { useProdutos } from '../../produtos/hooks/useProdutos';
+import { useEstoque } from '../../estoque/hooks/useEstoque';
+import { useCaixa } from '../../caixa/hooks/useCaixa';
+import { useFuncionarios } from '../../usuarios/hooks/useFuncionarios';
+import { useAuth } from '../../auth/context/AuthContext';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
-  const { produtos } = useProdutos();
-  const { movimentos } = useEstoque();
-  const { movimentacoes, saldoAtual } = useCaixa();
-  const { funcionarios } = useFuncionarios();
+  const { produtos, isLoading: isLoadingProdutos } = useProdutos();
+  const { movimentacoes, isLoading: isLoadingEstoque } = useEstoque();
+  const { saldoAtual, isLoading: isLoadingCaixa } = useCaixa();
+  const { funcionarios, isLoading: isLoadingFuncionarios } = useFuncionarios();
   
   const [totalProdutos, setTotalProdutos] = useState(0);
   const [valorTotalEstoque, setValorTotalEstoque] = useState(0);
   const [produtosAbaixoMinimo, setProdutosAbaixoMinimo] = useState(0);
   const [funcionariosAtivos, setFuncionariosAtivos] = useState(0);
-  const [vendasHoje, setVendasHoje] = useState(0);
-  const [vendasMes, setVendasMes] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Calcular estatísticas
   useEffect(() => {
+    // Verificar se todos os dados foram carregados
+    if (isLoadingProdutos || isLoadingEstoque || isLoadingCaixa || isLoadingFuncionarios) {
+      setIsLoading(true);
+      return;
+    }
+    
+    setIsLoading(false);
+    
     // Total de produtos
     setTotalProdutos(produtos.length);
     
@@ -40,12 +47,7 @@ const DashboardPage = () => {
     const ativos = funcionarios.filter(funcionario => funcionario.ativo).length;
     setFuncionariosAtivos(ativos);
     
-    // Vendas de hoje (simulado)
-    setVendasHoje(Math.floor(Math.random() * 5000));
-    
-    // Vendas do mês (simulado)
-    setVendasMes(Math.floor(Math.random() * 50000));
-  }, [produtos, funcionarios]);
+  }, [produtos, funcionarios, isLoadingProdutos, isLoadingEstoque, isLoadingCaixa, isLoadingFuncionarios]);
   
   const formatarMoeda = (valor: number) => {
     return valor.toLocaleString('pt-BR', {
@@ -53,6 +55,19 @@ const DashboardPage = () => {
       currency: 'BRL'
     });
   };
+  
+  if (isLoading) {
+    return (
+      <div className="container px-4 py-8 mx-auto">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-600">Carregando informações do dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="container px-4 py-8 mx-auto">
@@ -165,7 +180,7 @@ const DashboardPage = () => {
         <h2 className="text-lg font-semibold mb-4">Alertas</h2>
         
         <div className="space-y-4">
-          {produtosAbaixoMinimo > 0 && (
+          {produtosAbaixoMinimo > 0 ? (
             <div className="flex items-center p-4 bg-red-50 rounded-md border border-red-200">
               <div className="p-2 rounded-full bg-red-100 text-red-500 mr-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -177,31 +192,71 @@ const DashboardPage = () => {
                 <p className="text-xs text-red-600">Verifique o estoque e faça os pedidos necessários.</p>
               </div>
             </div>
+          ) : (
+            <div className="flex items-center p-4 bg-green-50 rounded-md border border-green-200">
+              <div className="p-2 rounded-full bg-green-100 text-green-500 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-green-800">Todos os produtos estão com estoque adequado</p>
+                <p className="text-xs text-green-600">Não há produtos abaixo do estoque mínimo.</p>
+              </div>
+            </div>
           )}
           
-          <div className="flex items-center p-4 bg-blue-50 rounded-md border border-blue-200">
-            <div className="p-2 rounded-full bg-blue-100 text-blue-500 mr-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          {movimentacoes.length === 0 ? (
+            <div className="flex items-center p-4 bg-blue-50 rounded-md border border-blue-200">
+              <div className="p-2 rounded-full bg-blue-100 text-blue-500 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-blue-800">Nenhuma venda registrada</p>
+                <p className="text-xs text-blue-600">Registre suas vendas no módulo PDV.</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-blue-800">Vendas de hoje: {formatarMoeda(vendasHoje)}</p>
-              <p className="text-xs text-blue-600">Total de vendas realizadas no dia.</p>
+          ) : (
+            <div className="flex items-center p-4 bg-blue-50 rounded-md border border-blue-200">
+              <div className="p-2 rounded-full bg-blue-100 text-blue-500 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-blue-800">Movimentações registradas: {movimentacoes.length}</p>
+                <p className="text-xs text-blue-600">Verifique o histórico completo no módulo de Estoque.</p>
+              </div>
             </div>
-          </div>
+          )}
           
-          <div className="flex items-center p-4 bg-green-50 rounded-md border border-green-200">
-            <div className="p-2 rounded-full bg-green-100 text-green-500 mr-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
+          {funcionarios.length === 0 ? (
+            <div className="flex items-center p-4 bg-yellow-50 rounded-md border border-yellow-200">
+              <div className="p-2 rounded-full bg-yellow-100 text-yellow-500 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-yellow-800">Nenhum funcionário cadastrado</p>
+                <p className="text-xs text-yellow-600">Cadastre funcionários no módulo de Funcionários.</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-green-800">Vendas do mês: {formatarMoeda(vendasMes)}</p>
-              <p className="text-xs text-green-600">Total de vendas realizadas no mês atual.</p>
+          ) : (
+            <div className="flex items-center p-4 bg-green-50 rounded-md border border-green-200">
+              <div className="p-2 rounded-full bg-green-100 text-green-500 mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-green-800">Funcionários ativos: {funcionariosAtivos}</p>
+                <p className="text-xs text-green-600">Total de funcionários: {funcionarios.length}</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
       
@@ -215,7 +270,7 @@ const DashboardPage = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
               <p className="text-gray-500">Gráfico de vendas por período</p>
-              <p className="text-sm text-gray-400 mt-2">Dados serão carregados do backend</p>
+              <p className="text-sm text-gray-400 mt-2">Disponível quando houver dados de vendas</p>
             </div>
           </div>
         </div>
@@ -229,7 +284,7 @@ const DashboardPage = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
               </svg>
               <p className="text-gray-500">Gráfico de produtos mais vendidos</p>
-              <p className="text-sm text-gray-400 mt-2">Dados serão carregados do backend</p>
+              <p className="text-sm text-gray-400 mt-2">Disponível quando houver dados de vendas</p>
             </div>
           </div>
         </div>

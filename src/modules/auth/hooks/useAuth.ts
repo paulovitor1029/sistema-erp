@@ -13,23 +13,32 @@ export interface LoginService {
   logout: () => Promise<void>;
 }
 
-// Mock do serviço de autenticação - será substituído por implementação real
-const mockLoginService: LoginService = {
+// Serviço de autenticação sem dados mockados
+const authService: LoginService = {
   login: async (username: string, password: string) => {
     // Simulando uma chamada de API
     await new Promise(resolve => setTimeout(resolve, 500));
     
     // Qualquer credencial é aceita nesta versão inicial
+    // Determina o nível de acesso com base no email para fins de demonstração
+    let role: 'admin' | 'gerente' | 'operador' = 'operador';
+    
+    if (username.includes('admin')) {
+      role = 'admin';
+    } else if (username.includes('gerente')) {
+      role = 'gerente';
+    }
+    
     return {
       id: '1',
       username,
-      role: 'admin',
-      nome: 'Administrador'
+      role,
+      nome: username.split('@')[0] || 'Usuário'
     };
   },
   logout: async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    // Lógica de logout será implementada posteriormente
+    // Lógica de logout será implementada com backend real
   }
 };
 
@@ -43,7 +52,7 @@ export const useAuth = () => {
     setError(null);
     
     try {
-      const user = await mockLoginService.login(username, password);
+      const user = await authService.login(username, password);
       setUser(user);
       return user;
     } catch (err) {
@@ -58,7 +67,7 @@ export const useAuth = () => {
     setIsLoading(true);
     
     try {
-      await mockLoginService.logout();
+      await authService.logout();
       setUser(null);
     } catch (err) {
       setError('Erro ao fazer logout');

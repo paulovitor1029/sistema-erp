@@ -192,12 +192,21 @@ const ClientesPage = () => {
               Tentar Novamente
             </button>
           </div>
+        ) : clientes.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p>Nenhum cliente cadastrado no sistema.</p>
+            <button
+              onClick={() => navigate('/clientes/novo')}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={!hasPermission('operador')}
+            >
+              Cadastrar Primeiro Cliente
+            </button>
+          </div>
         ) : clientesFiltrados.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <p>Nenhum cliente encontrado.</p>
-            {(filtro || tipoFiltro !== 'todos' || statusFiltro !== 'todos') && (
-              <p className="mt-2">Tente ajustar os filtros ou adicione um novo cliente.</p>
-            )}
+            <p>Nenhum cliente encontrado com os filtros atuais.</p>
+            <p className="mt-2">Tente ajustar os filtros para ver mais resultados.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

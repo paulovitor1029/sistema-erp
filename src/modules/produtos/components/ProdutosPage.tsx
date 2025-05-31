@@ -188,12 +188,21 @@ const ProdutosPage = () => {
               Tentar Novamente
             </button>
           </div>
+        ) : produtos.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p>Nenhum produto cadastrado no sistema.</p>
+            <button
+              onClick={() => navigate('/produtos/novo')}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={!hasPermission('operador')}
+            >
+              Cadastrar Primeiro Produto
+            </button>
+          </div>
         ) : produtosFiltrados.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <p>Nenhum produto encontrado.</p>
-            {(filtro || categoriaFiltro || statusFiltro !== 'todos') && (
-              <p className="mt-2">Tente ajustar os filtros ou adicione um novo produto.</p>
-            )}
+            <p>Nenhum produto encontrado com os filtros atuais.</p>
+            <p className="mt-2">Tente ajustar os filtros para ver mais resultados.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

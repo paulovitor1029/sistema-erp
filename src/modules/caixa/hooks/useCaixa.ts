@@ -81,36 +81,11 @@ export const useCaixa = () => {
     setError(null);
     
     try {
-      // Simulando uma chamada de API
+      // Aqui seria uma chamada de API real para buscar movimentações
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Para fins de demonstração, criar algumas movimentações de exemplo
-      // Em produção, isso seria substituído por uma chamada de API real
-      const dataAtual = new Date().toISOString().split('T')[0];
-      const movimentacoesDemo = [
-        {
-          id: 1,
-          data: dataAtual,
-          tipo: 'entrada' as const,
-          categoria: 'Venda',
-          descricao: 'Venda de produto',
-          valor: 150.00,
-          formaPagamento: 'dinheiro',
-          funcionarioId: 1,
-        },
-        {
-          id: 2,
-          data: dataAtual,
-          tipo: 'saida' as const,
-          categoria: 'Despesa',
-          descricao: 'Pagamento de fornecedor',
-          valor: 50.00,
-          formaPagamento: 'transferencia',
-          funcionarioId: 1,
-        }
-      ];
-      
-      setMovimentacoes(movimentacoesDemo);
+      // Sem dados mockados - estado inicial vazio
+      setMovimentacoes([]);
     } catch (err) {
       setError('Erro ao carregar movimentações');
     } finally {
@@ -123,28 +98,12 @@ export const useCaixa = () => {
     setError(null);
     
     try {
-      // Simulando uma chamada de API
+      // Aqui seria uma chamada de API real para buscar fechamentos
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Para fins de demonstração, criar um caixa aberto
-      // Em produção, isso seria substituído por uma chamada de API real
-      const dataAtual = new Date().toISOString().split('T')[0];
-      const caixaDemo: FechamentoCaixa = {
-        id: 1,
-        dataAbertura: dataAtual,
-        dataFechamento: '',
-        valorInicial: 100.00,
-        valorFinal: 0,
-        valorEntradas: 0,
-        valorSaidas: 0,
-        valorDiferenca: 0,
-        funcionarioAberturaId: 1,
-        funcionarioFechamentoId: 0,
-        status: 'aberto'
-      };
-      
-      setFechamentos([caixaDemo]);
-      setCaixaAtual(caixaDemo);
+      // Sem dados mockados - estado inicial vazio
+      setFechamentos([]);
+      setCaixaAtual(null);
     } catch (err) {
       setError('Erro ao carregar fechamentos');
     } finally {
@@ -169,11 +128,11 @@ export const useCaixa = () => {
         return null;
       }
       
-      // Simulando uma chamada de API
+      // Aqui seria uma chamada de API real para abrir caixa
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const novoCaixa: FechamentoCaixa = {
-        id: Math.max(...fechamentos.map(f => f.id), 0) + 1,
+        id: Math.max(...fechamentos.map(f => f.id || 0), 0) + 1,
         dataAbertura: dados.data,
         dataFechamento: '',
         valorInicial: dados.valorInicial,
@@ -181,7 +140,7 @@ export const useCaixa = () => {
         valorEntradas: 0,
         valorSaidas: 0,
         valorDiferenca: 0,
-        funcionarioAberturaId: 1, // Usuário logado
+        funcionarioAberturaId: 1, // Seria o ID do usuário logado
         funcionarioFechamentoId: 0,
         observacao: dados.observacao,
         status: 'aberto'
@@ -210,7 +169,7 @@ export const useCaixa = () => {
         return null;
       }
       
-      // Simulando uma chamada de API
+      // Aqui seria uma chamada de API real para fechar caixa
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Calcular valores
@@ -237,7 +196,7 @@ export const useCaixa = () => {
         valorEntradas,
         valorSaidas,
         valorDiferenca,
-        funcionarioFechamentoId: 1, // Usuário logado
+        funcionarioFechamentoId: 1, // Seria o ID do usuário logado
         observacao: dados.observacao || caixaAtual.observacao,
         status: 'fechado'
       };
@@ -268,11 +227,11 @@ export const useCaixa = () => {
         return null;
       }
       
-      // Simulando uma chamada de API
+      // Aqui seria uma chamada de API real para registrar movimentação
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const novaMovimentacao: MovimentacaoCaixa = {
-        id: Math.max(...movimentacoes.map(m => m.id), 0) + 1,
+        id: Math.max(...movimentacoes.map(m => m.id || 0), 0) + 1,
         data: movimentacao.data,
         tipo: movimentacao.tipo,
         categoria: movimentacao.tipo === 'entrada' ? 'Venda' : 'Despesa',
@@ -280,7 +239,7 @@ export const useCaixa = () => {
         valor: movimentacao.valor,
         formaPagamento: movimentacao.formaPagamento,
         vendaId: movimentacao.vendaId,
-        funcionarioId: 1, // Usuário logado
+        funcionarioId: 1, // Seria o ID do usuário logado
         observacao: movimentacao.observacao
       };
       
