@@ -1,0 +1,295 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Configurações da empresa
+model Empresa {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  cnpj              String   @unique
+  email             String
+  telefone          String
+  endereco          String
+  cidade            String
+  estado            String
+  cep               String
+  logo              String?
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+  
+  // Configurações de módulos ativos
+  moduloProdutos    Boolean  @default(true)
+  moduloServicos    Boolean  @default(false)
+  moduloEstoque     Boolean  @default(true)
+  moduloPDV         Boolean  @default(true)
+  moduloPromocoes   Boolean  @default(true)
+  moduloFiscal      Boolean  @default(true)
+  moduloPonto       Boolean  @default(true)
+  
+  // Tipo de negócio
+  tipoNegocio       String   @default("comercio") // comercio, servico, industria, misto
+  
+  // Relações
+  usuarios          Usuario[]
+  produtos          Produto[]
+  servicos          Servico[]
+  clientes          Cliente[]
+  funcionarios      Funcionario[]
+  movimentacoes     MovimentacaoEstoque[]
+  vendas            Venda[]
+  promocoes         Promocao[]
+}
+
+// Usuários do sistema
+model Usuario {
+  id            Int       @id @default(autoincrement())
+  nome          String
+  email         String    @unique
+  senha         String
+  role          String    @default("operador") // admin, gerente, operador
+  ativo         Boolean   @default(true)
+  ultimoLogin   DateTime?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  vendas        Venda[]
+  movimentacoes MovimentacaoEstoque[]
+  pontos        RegistroPonto[]
+}
+
+// Produtos físicos
+model Produto {
+  id            Int       @id @default(autoincrement())
+  codigo        String
+  nome          String
+  descricao     String?
+  categoria     String
+  precoCusto    Float
+  precoVenda    Float
+  estoqueMinimo Float     @default(0)
+  estoqueAtual  Float     @default(0)
+  unidadeMedida String    @default("un")
+  ativo         Boolean   @default(true)
+  imagem        String?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Para indústria
+  produtoFinal  Boolean   @default(true)
+  
+  // Relações
+  movimentacoes MovimentacaoEstoque[]
+  itensVenda    ItemVenda[]
+  promocoes     Promocao[]
+  componentes   ComponenteProduto[] @relation("ProdutoFinal")
+  insumos       ComponenteProduto[] @relation("Insumo")
+}
+
+// Componentes de produto (BOM - Bill of Materials) para indústria
+model ComponenteProduto {
+  id              Int     @id @default(autoincrement())
+  quantidade      Float
+  
+  produtoFinalId  Int
+  produtoFinal    Produto @relation("ProdutoFinal", fields: [produtoFinalId], references: [id])
+  
+  insumoId        Int
+  insumo          Produto @relation("Insumo", fields: [insumoId], references: [id])
+}
+
+// Serviços
+model Servico {
+  id              Int       @id @default(autoincrement())
+  codigo          String
+  nome            String
+  descricao       String?
+  categoria       String
+  precoBase       Float
+  precoPorHora    Boolean   @default(false)
+  tempoEstimado   Int?      // Em minutos
+  ativo           Boolean   @default(true)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+  
+  empresaId       Int
+  empresa         Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  itensVenda      ItemVenda[]
+  promocoes       Promocao[]
+}
+
+// Clientes
+model Cliente {
+  id                Int       @id @default(autoincrement())
+  nome              String
+  tipo              String    // fisica, juridica
+  cpfCnpj           String    @unique
+  email             String?
+  telefone          String?
+  celular           String?
+  endereco          String?
+  cidade            String?
+  estado            String?
+  cep               String?
+  dataCadastro      DateTime  @default(now())
+  dataUltimaCompra  DateTime?
+  valorTotalCompras Float     @default(0)
+  pontosFidelidade  Int       @default(0)
+  observacoes       String?
+  ativo             Boolean   @default(true)
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+  
+  empresaId         Int
+  empresa           Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  vendas            Venda[]
+}
+
+// Funcionários
+model Funcionario {
+  id            Int       @id @default(autoincrement())
+  nome          String
+  cpf           String    @unique
+  email         String?
+  telefone      String?
+  cargo         String
+  salario       Float
+  dataAdmissao  DateTime
+  dataDemissao  DateTime?
+  horarioEntrada String
+  horarioSaida  String
+  ativo         Boolean   @default(true)
+  nivelAcesso   String    @default("operador") // admin, gerente, operador
+  foto          String?
+  observacoes   String?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  pontos        RegistroPonto[]
+}
+
+// Registro de ponto
+model RegistroPonto {
+  id            Int       @id @default(autoincrement())
+  data          DateTime  @default(now())
+  tipo          String    // entrada, saida, entrada_almoco, saida_almoco
+  homeOffice    Boolean   @default(false)
+  justificativa String?
+  
+  funcionarioId Int
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+  
+  usuarioId     Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id])
+}
+
+// Movimentação de estoque
+model MovimentacaoEstoque {
+  id            Int       @id @default(autoincrement())
+  tipo          String    // entrada, saida, ajuste, perda, devolucao, producao
+  quantidade    Float
+  data          DateTime  @default(now())
+  observacao    String?
+  
+  produtoId     Int
+  produto       Produto   @relation(fields: [produtoId], references: [id])
+  
+  usuarioId     Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id])
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+}
+
+// Vendas
+model Venda {
+  id            Int       @id @default(autoincrement())
+  data          DateTime  @default(now())
+  subtotal      Float
+  desconto      Float     @default(0)
+  total         Float
+  formaPagamento String
+  status        String    // aberta, finalizada, cancelada
+  observacao    String?
+  
+  clienteId     Int?
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id])
+  
+  usuarioId     Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id])
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  itens         ItemVenda[]
+}
+
+// Itens de venda
+model ItemVenda {
+  id            Int       @id @default(autoincrement())
+  quantidade    Float
+  precoUnitario Float
+  desconto      Float     @default(0)
+  total         Float
+  
+  vendaId       Int
+  venda         Venda     @relation(fields: [vendaId], references: [id])
+  
+  produtoId     Int?
+  produto       Produto?  @relation(fields: [produtoId], references: [id])
+  
+  servicoId     Int?
+  servico       Servico?  @relation(fields: [servicoId], references: [id])
+  
+  promocaoId    Int?
+  promocao      Promocao? @relation(fields: [promocaoId], references: [id])
+}
+
+// Promoções
+model Promocao {
+  id            Int       @id @default(autoincrement())
+  nome          String
+  descricao     String?
+  tipoDesconto  String    // percentual, valor
+  valorDesconto Float
+  dataInicio    DateTime
+  dataFim       DateTime
+  ativo         Boolean   @default(true)
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+  
+  produtoId     Int?
+  produto       Produto?  @relation(fields: [produtoId], references: [id])
+  
+  servicoId     Int?
+  servico       Servico?  @relation(fields: [servicoId], references: [id])
+  
+  empresaId     Int
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  
+  // Relações
+  itensVenda    ItemVenda[]
+}
