@@ -1,50 +1,74 @@
-# React + TypeScript + Vite
+# Guia de Instalação e Uso Rápido - Sistema ERP
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Instalação
 
-Currently, two official plugins are available:
+1. Extraia o arquivo `sistema-estoque-sem-node.zip` para uma pasta de sua escolha
+2. Abra um terminal na pasta extraída
+3. Execute `npm install` ou `pnpm install` para instalar as dependências
+4. Execute `npm run dev` ou `pnpm run dev` para iniciar o servidor de desenvolvimento
+5. Acesse o sistema em `http://localhost:5173`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Primeiro Acesso
 
-## Expanding the ESLint configuration
+- **Login**: Digite qualquer email e senha (na versão inicial, qualquer credencial é aceita)
+- **Dica**: Use emails com "admin" ou "gerente" para obter diferentes níveis de permissão
+  - Ex: admin@sistema.com = acesso de administrador
+  - Ex: gerente@sistema.com = acesso de gerente
+  - Ex: usuario@sistema.com = acesso de operador
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Módulos Principais
 
-- Configure the top-level `parserOptions` property like this:
+### Produtos
+- Cadastre produtos com código de barras, nome, categoria, preços
+- Defina estoque mínimo e controle validade
+- Ative/desative produtos conforme necessário
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+### Estoque
+- Registre entradas, saídas, perdas e devoluções
+- Visualize histórico de movimentações
+- Receba alertas de estoque mínimo
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+### Funcionários
+- Cadastre funcionários com diferentes níveis de acesso
+- Controle permissões por função
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+### Ponto
+- Registre entrada e saída de funcionários
+- Visualize relatórios de horas trabalhadas
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+### Clientes
+- Mantenha cadastro completo de clientes
+- Acompanhe histórico de compras
+- Gerencie programa de fidelidade
+
+### PDV/Caixa
+- Realize abertura e fechamento de caixa
+- Registre vendas com leitura de código de barras
+- Aplique promoções automaticamente
+- Processe diferentes formas de pagamento
+
+### Fiscal
+- Configure integrações com NFC-e e SAT
+- Gere documentos fiscais
+- Imprima DANFE em impressora térmica
+
+### Promoções
+- Crie promoções por produto ou categoria
+- Defina datas de início e fim
+- Aplique descontos percentuais ou valores fixos
+
+### Relatórios
+- Visualize vendas por período, funcionário ou cliente
+- Identifique produtos mais vendidos
+- Compare desempenho mês a mês
+- Exporte para CSV ou PDF
+
+### Configurações
+- Configure dados da empresa
+- Gerencie formas de pagamento
+- Configure backup automático
+- Gerencie integrações
+
+## Suporte
+
+Para mais informações, consulte a documentação completa em `docs/DOCUMENTACAO.md`
