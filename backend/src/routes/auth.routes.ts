@@ -1,42 +1,49 @@
-import express from 'express';
+import express, { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { authenticateToken } from '../middlewares/auth.middleware';
 
-const router = express.Router();
+const router: Router = express.Router();
 const prisma = new PrismaClient();
 
-// Rota de login
+// Login
 router.post('/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
-
+    
     if (!email || !senha) {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
-
+    
     // Buscar usuário pelo email
     const usuario = await prisma.usuario.findUnique({
       where: { email },
-      include: { empresa: true }
+      include: {
+        empresa: {
+          select: {
+            id: true,
+            nome: true,
+            tipo: true,
+            modulosAtivos: true
+          }
+        }
+      }
     });
-
+    
     if (!usuario) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
-
-    // Verificar se o usuário está ativo
-    if (!usuario.ativo) {
-      return res.status(401).json({ error: 'Usuário inativo' });
-    }
-
+    
     // Verificar senha
-    const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
-    if (!senhaCorreta) {
+    const senhaValida = await bcrypt.compare(senha, usuario.senha);
+    
+    if (!senhaValida) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
-
+    
     // Gerar token JWT
+    const secret = process.env.JWT_SECRET || 'sistema-erp-multiempresa-secret-key-2025';
     const token = jwt.sign(
       { 
         id: usuario.id, 
@@ -44,16 +51,10 @@ router.post('/login', async (req, res) => {
         role: usuario.role,
         empresaId: usuario.empresaId
       },
-      process.env.JWT_SECRET || 'sistema-erp-multiempresa-secret-key-2025',
-      { expiresIn: '24h' }
+      secret,
+      { expiresIn: '8h' }
     );
-
-    // Atualizar último login
-    await prisma.usuario.update({
-      where: { id: usuario.id },
-      data: { ultimoLogin: new Date() }
-    });
-
+    
     // Retornar dados do usuário e token
     return res.json({
       token,
@@ -62,20 +63,7 @@ router.post('/login', async (req, res) => {
         nome: usuario.nome,
         email: usuario.email,
         role: usuario.role,
-        empresa: {
-          id: usuario.empresa.id,
-          nome: usuario.empresa.nome,
-          tipoNegocio: usuario.empresa.tipoNegocio,
-          modulos: {
-            produtos: usuario.empresa.moduloProdutos,
-            servicos: usuario.empresa.moduloServicos,
-            estoque: usuario.empresa.moduloEstoque,
-            pdv: usuario.empresa.moduloPDV,
-            promocoes: usuario.empresa.moduloPromocoes,
-            fiscal: usuario.empresa.moduloFiscal,
-            ponto: usuario.empresa.moduloPonto
-          }
-        }
+        empresa: usuario.empresa
       }
     });
   } catch (error) {
@@ -84,56 +72,42 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Rota para verificar token
-router.get('/verificar-token', async (req, res) => {
+// Verificar token
+router.get('/verificar', authenticateToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ error: 'Token não fornecido' });
+    if (!req.user) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
     }
     
-    try {
-      const decoded = jwt.verify(
-        token, 
-        process.env.JWT_SECRET || 'sistema-erp-multiempresa-secret-key-2025'
-      ) as any;
-      
-      // Buscar usuário atualizado
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: decoded.id },
-        include: { empresa: true }
-      });
-      
-      if (!usuario || !usuario.ativo) {
-        return res.status(401).json({ error: 'Usuário inválido ou inativo' });
-      }
-      
-      return res.json({
-        usuario: {
-          id: usuario.id,
-          nome: usuario.nome,
-          email: usuario.email,
-          role: usuario.role,
-          empresa: {
-            id: usuario.empresa.id,
-            nome: usuario.empresa.nome,
-            tipoNegocio: usuario.empresa.tipoNegocio,
-            modulos: {
-              produtos: usuario.empresa.moduloProdutos,
-              servicos: usuario.empresa.moduloServicos,
-              estoque: usuario.empresa.moduloEstoque,
-              pdv: usuario.empresa.moduloPDV,
-              promocoes: usuario.empresa.moduloPromocoes,
-              fiscal: usuario.empresa.moduloFiscal,
-              ponto: usuario.empresa.moduloPonto
-            }
+    // Buscar usuário pelo ID
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.user.id },
+      include: {
+        empresa: {
+          select: {
+            id: true,
+            nome: true,
+            tipo: true,
+            modulosAtivos: true
           }
         }
-      });
-    } catch (error) {
-      return res.status(401).json({ error: 'Token inválido ou expirado' });
+      }
+    });
+    
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
     }
+    
+    // Retornar dados do usuário
+    return res.json({
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        role: usuario.role,
+        empresa: usuario.empresa
+      }
+    });
   } catch (error) {
     console.error('Erro ao verificar token:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });
