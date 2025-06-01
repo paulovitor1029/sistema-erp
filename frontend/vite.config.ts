@@ -5,7 +5,7 @@ import { defineConfig, loadEnv } from "vite"
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Carrega as variáveis de ambiente com base no modo (development, production)
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
   
   return {
     plugins: [react()],
@@ -14,9 +14,12 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    // Define variáveis de ambiente disponíveis no cliente
+    // Define apenas as variáveis de ambiente necessárias com prefixo VITE_
     define: {
-      'process.env': env
+      // Expõe apenas variáveis VITE_ específicas em vez de todo o process.env
+      'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL),
+      'import.meta.env.VITE_APP_NAME': JSON.stringify(env.VITE_APP_NAME),
+      // Adicione outras variáveis VITE_ conforme necessário
     },
     server: {
       // Configura o proxy para redirecionar chamadas de API para o backend

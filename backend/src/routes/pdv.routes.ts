@@ -275,7 +275,7 @@ router.post('/:empresaId/venda/:id/item', authenticateToken, async (req, res) =>
     }
     
     // Calcular total do item
-    const total = (Number(precoUnitario) * Number(quantidade)) - Number(desconto || 0);
+    const totalItem = (Number(precoUnitario) * Number(quantidade)) - Number(desconto || 0);
     
     // Adicionar item
     const novoItem = await prisma.itemVenda.create({
@@ -283,7 +283,7 @@ router.post('/:empresaId/venda/:id/item', authenticateToken, async (req, res) =>
         quantidade: Number(quantidade),
         precoUnitario: Number(precoUnitario),
         desconto: Number(desconto || 0),
-        total,
+        total: totalItem,
         produtoId: produtoId ? Number(produtoId) : undefined,
         servicoId: servicoId ? Number(servicoId) : undefined,
         promocaoId: promocaoId ? Number(promocaoId) : undefined,
@@ -300,13 +300,13 @@ router.post('/:empresaId/venda/:id/item', authenticateToken, async (req, res) =>
     const itens = [...venda.itens, novoItem];
     const subtotal = itens.reduce((sum, item) => sum + (item.precoUnitario * item.quantidade), 0);
     const descontoItens = itens.reduce((sum, item) => sum + item.desconto, 0);
-    const total = subtotal - descontoItens - venda.desconto;
+    const vendaTotal = subtotal - descontoItens - venda.desconto;
     
     const vendaAtualizada = await prisma.venda.update({
       where: { id: Number(id) },
       data: {
         subtotal,
-        total
+        total: vendaTotal
       },
       include: {
         itens: {
@@ -427,13 +427,13 @@ router.delete('/:empresaId/venda/:id/item/:itemId', authenticateToken, async (re
     
     const subtotal = itensRestantes.reduce((sum, item) => sum + (item.precoUnitario * item.quantidade), 0);
     const descontoItens = itensRestantes.reduce((sum, item) => sum + item.desconto, 0);
-    const total = subtotal - descontoItens - venda.desconto;
+    const vendaTotal = subtotal - descontoItens - venda.desconto;
     
     await prisma.venda.update({
       where: { id: Number(id) },
       data: {
         subtotal,
-        total
+        total: vendaTotal
       }
     });
     
@@ -529,14 +529,14 @@ router.put('/:empresaId/venda/:id/item/:itemId', authenticateToken, async (req, 
     }
     
     // Calcular novo total do item
-    const total = (item.precoUnitario * Number(quantidade)) - item.desconto;
+    const itemTotal = (item.precoUnitario * Number(quantidade)) - item.desconto;
     
     // Atualizar item
     await prisma.itemVenda.update({
       where: { id: Number(itemId) },
       data: {
         quantidade: Number(quantidade),
-        total
+        total: itemTotal
       }
     });
     
@@ -547,13 +547,13 @@ router.put('/:empresaId/venda/:id/item/:itemId', authenticateToken, async (req, 
     
     const subtotal = itens.reduce((sum, item) => sum + (item.precoUnitario * item.quantidade), 0);
     const descontoItens = itens.reduce((sum, item) => sum + item.desconto, 0);
-    const total = subtotal - descontoItens - venda.desconto;
+    const vendaTotal = subtotal - descontoItens - venda.desconto;
     
     await prisma.venda.update({
       where: { id: Number(id) },
       data: {
         subtotal,
-        total
+        total: vendaTotal
       }
     });
     
@@ -585,11 +585,6 @@ router.put('/:empresaId/venda/:id/desconto', authenticateToken, async (req, res)
       return res.status(403).json({ error: 'Acesso não autorizado a esta empresa' });
     }
     
-    // Verificar permissão para desconto
-    if (Number(desconto) > 0 && usuario.role === 'operador') {
-      return res.status(403).json({ error: 'Apenas gerentes e administradores podem aplicar descontos' });
-    }
-    
     // Verificar se a venda existe e está aberta
     const venda = await prisma.venda.findFirst({
       where: {
@@ -606,20 +601,33 @@ router.put('/:empresaId/venda/:id/desconto', authenticateToken, async (req, res)
       return res.status(404).json({ error: 'Venda não encontrada ou não está aberta' });
     }
     
+    // Verificar limite de desconto conforme perfil
+    const limiteDesconto = usuario.role === 'admin' ? 100 : 
+                          usuario.role === 'manager' ? 30 : 10;
+    
+    const subtotal = venda.subtotal;
+    const percentualDesconto = (Number(desconto) / subtotal) * 100;
+    
+    if (percentualDesconto > limiteDesconto) {
+      return res.status(403).json({ 
+        error: `Seu perfil permite desconto máximo de ${limiteDesconto}%` 
+      });
+    }
+    
     // Calcular novo total
     const descontoItens = venda.itens.reduce((sum, item) => sum + item.desconto, 0);
-    const total = venda.subtotal - descontoItens - Number(desconto);
-    
-    if (total < 0) {
-      return res.status(400).json({ error: 'Desconto não pode ser maior que o valor da venda' });
-    }
+    const vendaTotal = subtotal - descontoItens - Number(desconto);
     
     // Atualizar venda
     const vendaAtualizada = await prisma.venda.update({
       where: { id: Number(id) },
       data: {
         desconto: Number(desconto),
-        total
+        total: vendaTotal
+      },
+      include: {
+        itens: true,
+        cliente: true
       }
     });
     
@@ -635,7 +643,7 @@ router.put('/:empresaId/venda/:id/finalizar', authenticateToken, async (req, res
   try {
     const { empresaId, id } = req.params;
     const userId = req.user?.id;
-    const { formaPagamento, observacao, clienteId } = req.body;
+    const { clienteId, formaPagamento, observacao } = req.body;
     
     if (!formaPagamento) {
       return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
@@ -667,48 +675,33 @@ router.put('/:empresaId/venda/:id/finalizar', authenticateToken, async (req, res
       return res.status(404).json({ error: 'Venda não encontrada ou não está aberta' });
     }
     
-    // Verificar se há itens na venda
     if (venda.itens.length === 0) {
-      return res.status(400).json({ error: 'Não é possível finalizar uma venda sem itens' });
+      return res.status(400).json({ error: 'Venda não possui itens' });
     }
     
-    // Verificar se o cliente existe
+    // Verificar se cliente existe
     if (clienteId) {
       const cliente = await prisma.cliente.findFirst({
         where: {
           id: Number(clienteId),
-          empresaId: Number(empresaId),
-          ativo: true
+          empresaId: Number(empresaId)
         }
       });
       
       if (!cliente) {
-        return res.status(404).json({ error: 'Cliente não encontrado ou inativo' });
+        return res.status(404).json({ error: 'Cliente não encontrado' });
       }
-      
-      // Atualizar dados do cliente
-      await prisma.cliente.update({
-        where: { id: Number(clienteId) },
-        data: {
-          dataUltimaCompra: new Date(),
-          valorTotalCompras: {
-            increment: venda.total
-          },
-          pontosFidelidade: {
-            increment: Math.floor(venda.total / 10) // 1 ponto a cada R$ 10,00
-          }
-        }
-      });
     }
     
     // Finalizar venda
     const vendaFinalizada = await prisma.venda.update({
       where: { id: Number(id) },
       data: {
+        clienteId: clienteId ? Number(clienteId) : undefined,
         formaPagamento,
         observacao,
-        clienteId: clienteId ? Number(clienteId) : undefined,
-        status: 'finalizada'
+        status: 'finalizada',
+        dataFinalizacao: new Date()
       },
       include: {
         itens: {
@@ -717,7 +710,29 @@ router.put('/:empresaId/venda/:id/finalizar', authenticateToken, async (req, res
             servico: true
           }
         },
-        cliente: true
+        cliente: true,
+        usuario: {
+          select: {
+            id: true,
+            nome: true,
+            email: true
+          }
+        }
+      }
+    });
+    
+    // Registrar movimentação financeira
+    await prisma.movimentacaoFinanceira.create({
+      data: {
+        tipo: 'receita',
+        valor: vendaFinalizada.total,
+        data: new Date(),
+        descricao: `Venda #${id}`,
+        formaPagamento,
+        status: 'confirmado',
+        vendaId: Number(id),
+        usuarioId: Number(userId),
+        empresaId: Number(empresaId)
       }
     });
     
@@ -735,6 +750,10 @@ router.put('/:empresaId/venda/:id/cancelar', authenticateToken, async (req, res)
     const userId = req.user?.id;
     const { motivo } = req.body;
     
+    if (!motivo) {
+      return res.status(400).json({ error: 'Motivo do cancelamento é obrigatório' });
+    }
+    
     // Verificar se o usuário pertence à empresa
     const usuario = await prisma.usuario.findUnique({
       where: { id: Number(userId) },
@@ -745,25 +764,27 @@ router.put('/:empresaId/venda/:id/cancelar', authenticateToken, async (req, res)
       return res.status(403).json({ error: 'Acesso não autorizado a esta empresa' });
     }
     
-    // Verificar permissão para cancelar
-    if (usuario.role === 'operador') {
-      return res.status(403).json({ error: 'Apenas gerentes e administradores podem cancelar vendas' });
-    }
-    
-    // Verificar se a venda existe e está aberta
+    // Apenas admin e gerentes podem cancelar vendas finalizadas
     const venda = await prisma.venda.findFirst({
       where: {
         id: Number(id),
-        empresaId: Number(empresaId),
-        status: 'aberta'
+        empresaId: Number(empresaId)
       },
       include: {
-        itens: true
+        itens: {
+          include: {
+            produto: true
+          }
+        }
       }
     });
     
     if (!venda) {
-      return res.status(404).json({ error: 'Venda não encontrada ou não está aberta' });
+      return res.status(404).json({ error: 'Venda não encontrada' });
+    }
+    
+    if (venda.status === 'finalizada' && usuario.role !== 'admin' && usuario.role !== 'manager') {
+      return res.status(403).json({ error: 'Apenas administradores e gerentes podem cancelar vendas finalizadas' });
     }
     
     // Restaurar estoque dos produtos
@@ -797,9 +818,28 @@ router.put('/:empresaId/venda/:id/cancelar', authenticateToken, async (req, res)
       where: { id: Number(id) },
       data: {
         status: 'cancelada',
-        observacao: motivo ? `Cancelada: ${motivo}` : 'Cancelada'
+        observacao: `Cancelada: ${motivo}`,
+        dataCancelamento: new Date()
       }
     });
+    
+    // Se havia movimentação financeira, cancelar
+    const movimentacao = await prisma.movimentacaoFinanceira.findFirst({
+      where: {
+        vendaId: Number(id),
+        empresaId: Number(empresaId)
+      }
+    });
+    
+    if (movimentacao) {
+      await prisma.movimentacaoFinanceira.update({
+        where: { id: movimentacao.id },
+        data: {
+          status: 'cancelado',
+          observacao: `Cancelada: ${motivo}`
+        }
+      });
+    }
     
     return res.json(vendaCancelada);
   } catch (error) {
